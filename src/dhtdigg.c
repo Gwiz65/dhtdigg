@@ -699,7 +699,7 @@ void dht_hash(void *hash_return, int hash_size,
 		key[2 + i] = CRYPT_HAPPY(c2[i]);
 	for(i = 0; i < 2 && i < len1; i++)
 		key[6 + i] = CRYPT_HAPPY(c3[i]);
-	strncpy(hash_return, crypt(key, "gw"), hash_size);
+	strncpy(hash_return, crypt(key, "dd"), hash_size);
 }
 
 /****************************************************************************
@@ -796,7 +796,7 @@ gint DhtThread(void)
 	}
 
 	// init dht
-	dht_init(s, s6, myid, (unsigned char*)"Gwiz");
+	dht_init(s, s6, myid, (unsigned char*)"digg");
 
 	if(s >= 0) 
 	{
