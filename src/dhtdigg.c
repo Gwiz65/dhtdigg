@@ -986,7 +986,7 @@ int main (int argc, char *argv[])
 	memset(&Bootstrap, 0, sizeof(Bootstrap));
 
 	// set our torrent directory
-	torrentdir = g_strconcat (g_get_home_dir (), "/dhtdigg/", NULL);
+	torrentdir = g_strconcat (g_get_home_dir (), "/.dhtdigg/", NULL);
 	// make sure work directory exists
 	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
 	WritetoBTwindow("Setting torrent directory to %s\nWaiting for DHT to populate. This could take 10 minutes or so....\n", torrentdir);
