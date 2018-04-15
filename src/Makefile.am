@@ -1,7 +1,7 @@
 ## Process this file with automake to produce Makefile.in
 ##
 ## /****************************************************************************
-##  * dhtdigg.c                                                                *
+##  * src/Makefile.am                                                          *
 ##  * Copyright (C) 2018 Gwiz <gwiz2009@gmail.com>                             *
 ##  *                                                                          *
 ##  * dhtdigg is free software: you can redistribute it and/or modify it       *
