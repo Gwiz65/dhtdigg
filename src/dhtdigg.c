@@ -929,32 +929,28 @@ static GtkWidget* CreateMainWindow (void)
 
 	// Load UI from file
 	builder = gtk_builder_new ();
-	if (!gtk_builder_add_from_file (builder, UI_FILE, &error))
+	if (gtk_builder_add_from_file (builder, UI_FILE, &error))
 	{
-		g_critical ("Couldn't load builder file: %s", error->message);
-		g_error_free (error);
+		// Auto-connect signal handlers
+		gtk_builder_connect_signals (builder, NULL);
+		// Get the window objects from the ui file
+		window = GTK_WIDGET (gtk_builder_get_object (builder, "window"));
+		DHTtextbuffer = GTK_TEXT_BUFFER (gtk_builder_get_object 
+		                                 (builder, "textbuffer1"));
+		BTtextbuffer = GTK_TEXT_BUFFER (gtk_builder_get_object 
+		                                (builder, "textbuffer2"));
+		DHTWindowScrollView = GTK_SCROLLED_WINDOW (gtk_builder_get_object 
+		                                           (builder, "scrolledwindow1"));
+		BTWindowScrollView = GTK_SCROLLED_WINDOW (gtk_builder_get_object 
+		                                          (builder, "scrolledwindow2"));
+		// unload builder
+		g_object_unref (builder);
 	}
-	// Auto-connect signal handlers
-	gtk_builder_connect_signals (builder, NULL);
-	// Get the window objects from the ui file
-	window = GTK_WIDGET (gtk_builder_get_object (builder, "window"));
-	DHTtextbuffer = GTK_TEXT_BUFFER (gtk_builder_get_object 
-	                                        (builder, "textbuffer1"));
-	BTtextbuffer = GTK_TEXT_BUFFER (gtk_builder_get_object 
-	                                        (builder, "textbuffer2"));
-
-	DHTWindowScrollView = GTK_SCROLLED_WINDOW (gtk_builder_get_object 
-	                                            (builder, "scrolledwindow1"));
-
-
-
-	BTWindowScrollView = GTK_SCROLLED_WINDOW (gtk_builder_get_object 
-	                                            (builder, "scrolledwindow2"));
-
-
-	                                 
-
-	g_object_unref (builder);
+	else
+	{
+		g_print ("Unable to load dhtdigg.ui. Reinstall dhtdigg.\n"); 
+	    exit(1);
+	}
 	return window;
 }
 
