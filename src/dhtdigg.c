@@ -202,9 +202,9 @@ int GetBTmsg(int sockfd, char * payload, int btmsgwant, int exmsgwant)
 
 /******************************************************************************
  *                                                                            *
- * Function: TimedConnect                                                    *
+ * Function: TimedConnect                                                     *
  *                                                                            *
- * Purpose : socket connect with timeout                                                                 *
+ * Purpose : socket connect with timeout                                      *
  *                                                                            *
  ******************************************************************************/
 int TimedConnect(int sockfd, const struct sockaddr *addr, socklen_t addrlen, int secs)
@@ -318,7 +318,7 @@ gint GetMetadataThread (void)
 			peer_sock_fd = socket(AF_INET, SOCK_STREAM, 0); 
 			// connect with timeout
 			if (!(TimedConnect(peer_sock_fd, (const struct sockaddr*) &peer_sock_addr, 
-			                    sizeof(struct sockaddr_in), 12) < 0 ))
+			                   sizeof(struct sockaddr_in), 12) < 0 ))
 			{
 				unsigned char handshake_msg[68];
 				int hshake_sent;
@@ -344,7 +344,6 @@ gint GetMetadataThread (void)
 				hshake_sent = send(peer_sock_fd, &handshake_msg, 68, 0);
 				if (hshake_sent == 68)
 				{
-
 					unsigned char handshakebuffer[69]; 
 					int hshake_recd;
 					char temp[2048];
@@ -569,7 +568,7 @@ gint GetMetadataThread (void)
  * Function: CaptureAnnounce                                                *
  *                                                                          *
  * Purpose : Called whenever DHT sees an announce peer. Puts info hash into *
- *           InfoHashQueue struct if it dosen't already exist               *
+ *           a PeerListQueue slot                                           *
  *                                                                          *
  ****************************************************************************/
 void CaptureAnnounce(unsigned char *hash, const struct sockaddr *fromaddr, unsigned short prt)
@@ -588,8 +587,8 @@ void CaptureAnnounce(unsigned char *hash, const struct sockaddr *fromaddr, unsig
 		inet_ntop(AF_INET, &PeerListQueue[peerlistopenslot].addr, 
 		          &temp[0], sizeof(temp));
 		WritetoBTwindow("Peer captured slot %i:  Address: %s  Port: %d\n", 
-		        peerlistopenslot, temp,
-		        ntohs(PeerListQueue[peerlistopenslot].prt));
+		                peerlistopenslot, temp,
+		                ntohs(PeerListQueue[peerlistopenslot].prt));
 		peerlistopenslot++;
 		if (peerlistopenslot == MAX_PEERPROSPECTS) peerlistopenslot = 0;
 	}
@@ -916,7 +915,7 @@ void MainWindowDestroy (GtkWidget *widget, gpointer data)
 }
 /****************************************************************************
  *                                                                          *
- * Function: CreateMainWindow                                                  *
+ * Function: CreateMainWindow                                               *
  *                                                                          *
  * Purpose :                                                                *
  *                                                                          *
@@ -949,7 +948,7 @@ static GtkWidget* CreateMainWindow (void)
 	else
 	{
 		g_print ("Unable to load dhtdigg.ui. Reinstall dhtdigg.\n"); 
-	    exit(1);
+		exit(1);
 	}
 	return window;
 }
@@ -990,7 +989,7 @@ int main (int argc, char *argv[])
 	// make sure work directory exists
 	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
 	WritetoBTwindow("Setting torrent directory to %s\nWaiting for DHT to populate. This could take 10 minutes or so....\n", torrentdir);
-	
+
 	// start dht thread
 	g_thread_new ("dhtthread", (GThreadFunc) DhtThread, NULL);
 	// start read message thread
