@@ -12,9 +12,14 @@ The saved .torrent files are UNFILTERED and UNCENSORED and possibly
 point to copyrighted material. Open in your bittorrent client at 
 your own risk. 
 
-dhtdigg does not download or share any of the bittorrent pieces
-containing the content being shared via bittorent. 
+Dhtdigg does not download or share any of the bittorrent pieces
+containing the content being shared via bittorent. Dhtdigg only 
+downloads the metadata and then disconnects.
 
-dhtdigg only downloads the metadata and then disconnects.
+TODO:
+ - next step is to curate the produced .torrent files into a searchable
+   database that provides magnet links. 
+
+ - Currently not capturing IPv6 peers.
          
          
