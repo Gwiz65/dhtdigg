@@ -367,6 +367,7 @@ gint GetMetadataThread (void)
 											int lastpiecesize = 0;
 											int counter = 0;
 											char filename[PATH_MAX];
+											char filenamebase[PATH_MAX];
 											int  torrentfile_fd;
 											time_t currenttime;
 											struct tm tm;
@@ -384,15 +385,16 @@ gint GetMetadataThread (void)
 											// open torrentfile;
 											currenttime = time(NULL);
 											tm = *localtime(&currenttime);
-											// use current time as filename
-											sprintf(filename, "%s%04d%02d%02d%02d%02d%02d.torrent", 
-											        torrentdir,
+											// use current time as filename base
+											sprintf(filenamebase, "%04d%02d%02d%02d%02d%02d.torrent", 
 											        tm.tm_year + 1900, 
 											        tm.tm_mon + 1, 
 											        tm.tm_mday, 
 											        tm.tm_hour, 
 											        tm.tm_min, 
 											        tm.tm_sec);
+											// set filename
+											sprintf(filename, "%s%s", torrentdir, filenamebase);
 											// create file
 											torrentfile_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
 											                      S_IRWXU | S_IRWXG | S_IRWXO);
@@ -491,7 +493,10 @@ gint GetMetadataThread (void)
 											}
 											else
 											{
-												fprintf(bt_display, "Metadata captured! Disconnecting.\n");
+												
+												fprintf(bt_display, "Metadata captured!!    Disconnecting peer.\n");
+												fflush(bt_display);
+												fprintf(bt_display, "Metadata saved to ~/.dhtdigg/%s\n", filenamebase);
 												fflush(bt_display);
 											}
 										}
