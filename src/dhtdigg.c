@@ -35,6 +35,8 @@
  *       Globals            *
  ****************************/
 int dhtpipe[2];
+int btpipe[2];
+FILE *bt_display;
 GtkTextBuffer *DHTtextbuffer;
 GtkTextBuffer *BTtextbuffer;
 GtkScrolledWindow *DHTWindowScrollView;
@@ -48,56 +50,7 @@ struct peerlist PeerListQueue[MAX_PEERPROSPECTS];
 int peerlistopenslot = 0;
 int peerlistnum = 0;
 struct bootstrap_storage Bootstrap;
-static char btwritebuffer[256];
 gchar *torrentdir;
-
-/******************************************************************************
- *                                                                            *
- * Function: DisplayBTmsg                                                     *
- *                                                                            *
- * Purpose : called by WritetoBTwindow to insert BT message in a thread       * 
- *           safe manner                                                      *
- *                                                                            *
- ******************************************************************************/
-gboolean DisplayBTmsg(void)
-{
-	GtkTextIter iter;
-	GtkAdjustment *vadj;
-
-	// insert into tex buffer
-	gtk_text_buffer_get_end_iter (BTtextbuffer, &iter);
-	gtk_text_buffer_insert (BTtextbuffer, &iter, btwritebuffer, -1);
-
-	// scroll to bottom
-	vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW
-	                                           (BTWindowScrollView));
-	gtk_adjustment_set_value (GTK_ADJUSTMENT(vadj), gtk_adjustment_get_upper 
-	                          (GTK_ADJUSTMENT(vadj)));
-	gtk_scrolled_window_set_vadjustment(GTK_SCROLLED_WINDOW
-	                                    (BTWindowScrollView), 
-	                                    GTK_ADJUSTMENT (vadj));
-	return FALSE; // run once
-}
-
-/******************************************************************************
- *                                                                            *
- * Function: WritetoBTwindow                                                  *
- *                                                                            *
- * Purpose : writes to BTwindow                                               *
- *                                                                            *
- ******************************************************************************/
-void WritetoBTwindow(char *format, ...)
-{
-	va_list args;
-
-	// get args
-	va_start(args, format);
-	vsprintf(btwritebuffer, format, args);
-	va_end(args);
-	// call insert routine
-	gdk_threads_add_idle((GSourceFunc) DisplayBTmsg, NULL);
-	usleep(50000); 
-}
 
 /******************************************************************************
  *                                                                            *
@@ -105,7 +58,7 @@ void WritetoBTwindow(char *format, ...)
  *                                                                            *
  * Purpose : returns bytes sent minus size header, 0=disconnect, -1=error     *
  *           payload points to message without the 4 byte message size header *
- *			 payload_size is number of bytes of payload                       * 
+ *           payload_size is number of bytes of payload                       * 
  *                                                                            *
  ******************************************************************************/
 int SendBTmsg(int sockfd, char * payload, uint32_t payload_size)
@@ -133,12 +86,12 @@ int SendBTmsg(int sockfd, char * payload, uint32_t payload_size)
  * Function: GetBTmsg                                                         *
  *                                                                            *
  * Purpose : returns size of payload, 0=disconnect, -1=errror, -2=strikeout   *
- *			 fills payload with recieved message                              *
- *			 btmsgwant indicates the bittorent message we are looking for     *
- *			 exmsgwant indicates the extended message we are looking for      *
+ *           fills payload with recieved message                              *
+ *           btmsgwant indicates the bittorent message we are looking for     *
+ *           exmsgwant indicates the extended message we are looking for      *
  *                                                                            *
- *			 This function will read 3 messages looking for what we want      *
- *			 and will respond with keepalive to nonappicable messages         *				
+ *           This function will read 3 messages looking for what we want      *
+ *           and will respond with keepalive to nonappicable messages         *				
  *                                                                            *
  ******************************************************************************/
 int GetBTmsg(int sockfd, char * payload, int btmsgwant, int exmsgwant)
@@ -190,7 +143,8 @@ int GetBTmsg(int sockfd, char * payload, int btmsgwant, int exmsgwant)
 			else
 			{
 				// send keepalive
-				WritetoBTwindow("Got BT message %i. Sending keepalive.\n", payload[0]);
+				fprintf(bt_display, "Got BT message %i. Sending keepalive.\n", payload[0]);
+				fflush(bt_display);
 				uint32_t keepalive = 0;
 				send(sockfd, &keepalive, 4, 0);
 			}
@@ -309,7 +263,8 @@ gint GetMetadataThread (void)
 			int peer_sock_fd;
 			struct sockaddr_in peer_sock_addr;
 
-			WritetoBTwindow("Attempting peer connect from slot %i.\n", peerlistnum);
+			fprintf(bt_display, "Attempting peer connect from slot %i.\n", peerlistnum);
+			fflush(bt_display);
 			// fill sockaddr
 			peer_sock_addr.sin_family = AF_INET;
 			memcpy(&(peer_sock_addr.sin_addr), &(PeerListQueue[peerlistnum].addr), 4);
@@ -349,14 +304,16 @@ gint GetMetadataThread (void)
 					char temp[2048];
 
 					memset(&handshakebuffer[0], 0x0, 68);
-					WritetoBTwindow("Handshake message sent.\n");
+					fprintf(bt_display, "Handshake message sent.\n");
+					fflush(bt_display);
 					// receive return handshake
 					hshake_recd = recv(peer_sock_fd, handshakebuffer, 68, 0);
 					if (hshake_recd == 68)
 					{
 						strncpy(&temp[0], (char *) &handshakebuffer[48], 8);
 						temp[8] = '\0';
-						WritetoBTwindow("Received handshake. Client code: %s\n", temp);
+						fprintf(bt_display, "Received handshake. Client code: %s\n", temp);
+						fflush(bt_display);
 						// check for extension bit
 						if (handshakebuffer[25] & 0x10)
 						{
@@ -365,7 +322,8 @@ gint GetMetadataThread (void)
 							int msgsize = 0;
 							int sent = 0;
 
-							WritetoBTwindow("Extension bit is set!\n");
+							fprintf(bt_display, "Extension bit is set!\n");
+							fflush(bt_display);
 							// clear buffer
 							memset(&msgbuffer[0], 0x0, MSGBUFFERSIZE); 
 							// send extension handshake
@@ -378,7 +336,8 @@ gint GetMetadataThread (void)
 							{
 								int got = 0;
 
-								WritetoBTwindow("Sent %i bytes for extension handshake.\n", sent);
+								fprintf(bt_display, "Sent %i bytes for extension handshake.\n", sent);
+								fflush(bt_display);
 								// clear buffer
 								memset(&msgbuffer[0], 0x0, MSGBUFFERSIZE); 
 								// get extended handshake back
@@ -387,7 +346,8 @@ gint GetMetadataThread (void)
 								{
 									const char *ptr;
 
-									WritetoBTwindow("Received %i bytes for extension handshake.\n", got);
+									fprintf(bt_display, "Received %i bytes for extension handshake.\n", got);
+									fflush(bt_display);
 									ptr = memmem(&msgbuffer[2], got - 2, "11:ut_metadatai", 15);
 									if (ptr)
 									{
@@ -396,7 +356,8 @@ gint GetMetadataThread (void)
 
 										// get ut_metadata value
 										msg_id = atol((char*) ptr + 15);
-										WritetoBTwindow("ut_metadata = %ld\n", msg_id);
+										fprintf(bt_display, "ut_metadata = %ld\n", msg_id);
+										fflush(bt_display);
 										// get metadata_size
 										ptr2 = memmem(&msgbuffer[2], got - 2, "13:metadata_sizei", 17);
 										if (ptr2)
@@ -412,11 +373,14 @@ gint GetMetadataThread (void)
 
 											// get metadata size
 											metasize = atol((char*) ptr2 + 17);
-											WritetoBTwindow("metadata_size = %ld\n", metasize);
+											fprintf(bt_display, "metadata_size = %ld\n", metasize);
+											fflush(bt_display);
 											numofpieces = metasize / 16384;
 											if ((lastpiecesize = metasize % 16384) > 0) numofpieces++;
-											WritetoBTwindow("Number of pieces = %d\n", numofpieces);
-											WritetoBTwindow("Last piece size = %d\n", lastpiecesize);
+											fprintf(bt_display, "Number of pieces = %d\n", numofpieces);
+											fflush(bt_display);
+											fprintf(bt_display, "Last piece size = %d\n", lastpiecesize);
+											fflush(bt_display);
 											// open torrentfile;
 											currenttime = time(NULL);
 											tm = *localtime(&currenttime);
@@ -439,7 +403,8 @@ gint GetMetadataThread (void)
 												int sent2 = 0;
 												int msgsize2 = 0;
 
-												WritetoBTwindow("Attempting to get metadata piece %i\n", counter);
+												fprintf(bt_display, "Attempting to get metadata piece %i\n", counter);
+												fflush(bt_display);
 												// clear buffer
 												memset(&msgbuffer[0], 0x0, MSGBUFFERSIZE); 
 												// send get piece message
@@ -453,14 +418,16 @@ gint GetMetadataThread (void)
 												{
 													int got2 = 0;
 
-													WritetoBTwindow("Sent %i bytes for get metadata piece.\n", sent2);
+													fprintf(bt_display, "Sent %i bytes for get metadata piece.\n", sent2);
+													fflush(bt_display);
 													// clear buffer
 													memset(&msgbuffer[0], 0x0, MSGBUFFERSIZE); 
 													// get piece back
 													got2 = GetBTmsg(peer_sock_fd, (char *) &msgbuffer, 20, 2);
 													if (got2 > 0)
 													{
-														WritetoBTwindow("Received %i bytes for get metadata piece.\n", got2);
+														fprintf(bt_display, "Received %i bytes for get metadata piece.\n", got2);
+														fflush(bt_display);
 														// store piece
 
 														// if last piece write lastpiecesize
@@ -477,9 +444,21 @@ gint GetMetadataThread (void)
 													}
 													else
 													{
-														if (got2 == 0) WritetoBTwindow("Disconnected by peer.\n");
-														else if (got2 == -2) WritetoBTwindow("Three strikes! You're out. Disconnecting.\n");
-														else WritetoBTwindow("Get piece receive failed. Disconnecting.\n");
+														if (got2 == 0) 
+														{
+															fprintf(bt_display, "Disconnected by peer.\n");
+															fflush(bt_display);
+														}
+														else if (got2 == -2) 
+														{
+															fprintf(bt_display, "Three strikes! You're out. Disconnecting.\n");
+															fflush(bt_display);
+														}
+														else 
+														{
+															fprintf(bt_display, "Get piece receive failed. Disconnecting.\n");
+															fflush(bt_display);
+														}
 														close(torrentfile_fd);
 														// exit while loop
 														counter = numofpieces;
@@ -487,8 +466,16 @@ gint GetMetadataThread (void)
 												}
 												else
 												{
-													if (sent2 == 0) WritetoBTwindow("Disconnected by peer.\n");
-													else WritetoBTwindow("Get piece send failed. Disconnecting.\n");
+													if (sent2 == 0) 
+													{
+														fprintf(bt_display, "Disconnected by peer.\n");
+														fflush(bt_display);
+													}
+													else 
+													{
+														fprintf(bt_display, "Get piece send failed. Disconnecting.\n");
+														fflush(bt_display);
+													}
 													close(torrentfile_fd);
 													// exit while loop
 													counter = numofpieces;
@@ -499,57 +486,98 @@ gint GetMetadataThread (void)
 											fsync(torrentfile_fd);
 											close(torrentfile_fd);
 											if (counter == numofpieces + 1)
+											{
 												remove(filename);
+											}
 											else
-												WritetoBTwindow("Metadata captured! Disconnecting.\n");
+											{
+												fprintf(bt_display, "Metadata captured! Disconnecting.\n");
+												fflush(bt_display);
+											}
 										}
 										else
 										{
-											WritetoBTwindow("Unable to get metadata size. Disconnecting.\n");
+											fprintf(bt_display, "Unable to get metadata size. Disconnecting.\n");
+											fflush(bt_display);
 										}
 									}
 									else
 									{
-										WritetoBTwindow("ut_metadata not supported. Disconnecting.\n");
+										fprintf(bt_display, "ut_metadata not supported. Disconnecting.\n");										fflush(bt_display);
+										fflush(bt_display);
 									}
 								}
 								else
 								{
-									if (got == 0) WritetoBTwindow("Disconnected by peer.\n");
-									else if (got == -2) WritetoBTwindow("Three strikes! You're out. Disconnecting.\n");
-									else WritetoBTwindow("Extension handshake received failed. Disconnecting.\n");
+									if (got == 0) 
+									{
+										fprintf(bt_display, "Disconnected by peer.\n");
+										fflush(bt_display);
+									}
+									else if (got == -2) 
+									{
+										fprintf(bt_display, "Three strikes! You're out. Disconnecting.\n");
+										fflush(bt_display);
+									}
+									else 
+									{
+										fprintf(bt_display, "Extension handshake received failed. Disconnecting.\n");
+										fflush(bt_display);
+									}
 								}
 							}
 							else
 							{
-								if (sent == 0) WritetoBTwindow("Disconnected by peer.\n");
-								else WritetoBTwindow("Extension handshake send failed. Disconnecting.\n");
+								if (sent == 0) 
+								{
+									fprintf(bt_display, "Disconnected by peer.\n");
+									fflush(bt_display);
+								}
+								else 
+								{
+									fprintf(bt_display, "Extension handshake send failed. Disconnecting.\n");
+									fflush(bt_display);
+								}
 							}
 						}
 						else
 						{
-							WritetoBTwindow("Peer dosen't support extension bit. Disconnecting.\n");
+							fprintf(bt_display, "Peer dosen't support extension bit. Disconnecting.\n");
+							fflush(bt_display);
 						}
 					}
 					else
 					{
 						if (hshake_recd == 0)
-							WritetoBTwindow("Disconnected by peer.\n");
+						{
+							fprintf(bt_display, "Disconnected by peer.\n");
+							fflush(bt_display);
+						}
 						else
-							WritetoBTwindow("Handshake not received. Disconnecting.\n");
+						{
+							fprintf(bt_display, "Handshake not received. Disconnecting.\n");
+							fflush(bt_display);
+						}
 					}
 				}
 				else
 				{
 					if (hshake_sent == 0)
-						WritetoBTwindow("Disconnected by peer.\n");
+					{
+						fprintf(bt_display, "Disconnected by peer.\n");
+						fflush(bt_display);
+					}
 					else
-						WritetoBTwindow("Handshake send failed. Disconnecting.\n");
+					{
+						fprintf(bt_display, "Handshake send failed. Disconnecting.\n");
+						fflush(bt_display);
+					}
 				}
 			}
-			else {
-
-				WritetoBTwindow("Peer connect from slot %i failed.\n", peerlistnum);
+			else 
+			{
+				fprintf(bt_display, "Peer connect from slot %i failed.\n", peerlistnum);
+				fflush(bt_display);
 			}
 			close(peer_sock_fd);
 			// clear slot
@@ -586,31 +614,34 @@ void CaptureAnnounce(unsigned char *hash, const struct sockaddr *fromaddr, unsig
 		memcpy(&PeerListQueue[peerlistopenslot].prt, &tmpport, 2);
 		inet_ntop(AF_INET, &PeerListQueue[peerlistopenslot].addr, 
 		          &temp[0], sizeof(temp));
-		WritetoBTwindow("Peer captured slot %i:  Address: %s  Port: %d\n", 
-		                peerlistopenslot, temp,
-		                ntohs(PeerListQueue[peerlistopenslot].prt));
+		fprintf(bt_display, "Peer captured slot %i:  Address: %s  Port: %d\n", 
+		        peerlistopenslot, temp,
+		        ntohs(PeerListQueue[peerlistopenslot].prt));
+		fflush(bt_display);
 		peerlistopenslot++;
 		if (peerlistopenslot == MAX_PEERPROSPECTS) peerlistopenslot = 0;
 	}
 	else
 	{
-		WritetoBTwindow("Ipv6 Address - peer not captured.\n");
+		fprintf(bt_display, "Ipv6 Address - peer not captured.\n");
+		fflush(bt_display);
 	}
 }
 
 /******************************************************************************
  *                                                                            *
- * Function: ReadDHTmsg                                                    *
+ * Function: ReadMessages                                                       *
  *                                                                            *
  * Purpose :                                                                  *
  *                                                                            *
  ******************************************************************************/
-gboolean ReadDHTmsg (void)
+gboolean ReadMessages (void)
 {
 	char c;
 	int ctr = 0;
 	char readbuffer[256];
 
+	// read dht messages
 	if (read (dhtpipe[0], &c, 1) == 1) // we have something to read
 	{
 		while ((c != '\n') && (c != '\0') && (ctr < 255))
@@ -638,6 +669,38 @@ gboolean ReadDHTmsg (void)
 			                          (GTK_ADJUSTMENT(vadj)));
 			gtk_scrolled_window_set_vadjustment(GTK_SCROLLED_WINDOW
 			                                    (DHTWindowScrollView), 
+			                                    GTK_ADJUSTMENT (vadj));
+		}
+	}
+	// read bt messages
+	ctr = 0;
+	if (read (btpipe[0], &c, 1) == 1) // we have something to read
+	{
+		while ((c != '\n') && (c != '\0') && (ctr < 255))
+		{
+			readbuffer[ctr] = c;
+			read (btpipe[0] ,&c, 1);
+			ctr++;
+		}
+		readbuffer[ctr] = '\0';
+		if (ctr > 0) 
+		{
+			GtkTextIter iter;
+			GtkAdjustment *vadj;
+			gchar *temp;
+
+			// write to the textbuffer
+			temp = g_strconcat(readbuffer, "\n", NULL);
+			gtk_text_buffer_get_end_iter (BTtextbuffer, &iter);
+			gtk_text_buffer_insert (BTtextbuffer, &iter, temp, -1);
+
+			// scroll to bottom
+			vadj = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW
+			                                           (BTWindowScrollView));
+			gtk_adjustment_set_value (GTK_ADJUSTMENT(vadj), gtk_adjustment_get_upper 
+			                          (GTK_ADJUSTMENT(vadj)));
+			gtk_scrolled_window_set_vadjustment(GTK_SCROLLED_WINDOW
+			                                    (BTWindowScrollView), 
 			                                    GTK_ADJUSTMENT (vadj));
 		}
 	}
@@ -980,6 +1043,15 @@ int main (int argc, char *argv[])
 	fcntl(dhtpipe[0], F_SETFL, flags | O_NONBLOCK);
 	// redirect dht_debug to the pipe
 	dht_debug = fdopen(dhtpipe[1], "w");
+
+	// create pipe for BT messages
+	pipe(btpipe);
+	// set read side to non-blocking
+	flags = fcntl(btpipe[0], F_GETFL, 0);
+	fcntl(btpipe[0], F_SETFL, flags | O_NONBLOCK);
+	// open pipe
+	bt_display = fdopen(btpipe[1], "w");
+	
 	// clear queues
 	memset(&PeerListQueue, 0, sizeof(PeerListQueue));
 	memset(&Bootstrap, 0, sizeof(Bootstrap));
@@ -988,12 +1060,14 @@ int main (int argc, char *argv[])
 	torrentdir = g_strconcat (g_get_home_dir (), "/.dhtdigg/", NULL);
 	// make sure work directory exists
 	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
-	WritetoBTwindow("Setting torrent directory to %s\nWaiting for DHT to populate. This could take 10 minutes or so....\n", torrentdir);
-
+	fprintf(bt_display, "Setting torrent directory to %s\n", torrentdir);
+	fflush(bt_display);
+	fprintf(bt_display, "Waiting for DHT to populate. This could take 10 minutes or so....\n");
+	fflush(bt_display);
 	// start dht thread
 	g_thread_new ("dhtthread", (GThreadFunc) DhtThread, NULL);
-	// start read message thread
-	gdk_threads_add_timeout (50, (GSourceFunc) ReadDHTmsg, NULL);
+	// start read messages thread
+	gdk_threads_add_timeout (50, (GSourceFunc) ReadMessages, NULL);
 	// start getmetadata thread
 	g_thread_new ("getmetadatathread", (GThreadFunc) GetMetadataThread, NULL);
 	// dht restart timer 32 minutes
