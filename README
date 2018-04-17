@@ -28,7 +28,7 @@ directory created in the current user's home directory.
           point to copyrighted material. Open in your bittorrent client at 
           your own risk. 
 
-		  dhtdigg does not download or share any of the bittorrent pieces
+          dhtdigg does not download or share any of the bittorrent pieces
           containing the content being shared via bittorent. dhtdigg only
           downloads the metadata and then disconnects.
 
