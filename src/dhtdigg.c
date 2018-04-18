@@ -461,7 +461,6 @@ gint GetMetadataThread (void)
 															fprintf(bt_display, "Get piece receive failed. Disconnecting.\n");
 															fflush(bt_display);
 														}
-														close(torrentfile_fd);
 														// exit while loop
 														counter = numofpieces;
 													}
@@ -478,7 +477,6 @@ gint GetMetadataThread (void)
 														fprintf(bt_display, "Get piece send failed. Disconnecting.\n");
 														fflush(bt_display);
 													}
-													close(torrentfile_fd);
 													// exit while loop
 													counter = numofpieces;
 												}
