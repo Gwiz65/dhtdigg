@@ -4,8 +4,8 @@ dhtdigg uses the work of Juliusz Chroboczek (dht.c & dht.h) to access the
 mainline dht network and capture announced peer addresses and thier 
 associated info_hashes. Once captured dhtdigg attempts to create a BT
 connection and request the metadata associated with that info_hash. If
-successful the metadata is saved as a .torrent file in the ".dhtdigg" 
-directory created in the current user's home directory.
+successful the metadata is saved as a .torrent file in the 
+".dhtdigg/torrents" directory created in the current user's home directory.
 
 *WARNING* 
 The saved .torrent files are UNFILTERED and UNCENSORED and possibly

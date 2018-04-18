@@ -50,6 +50,7 @@ struct peerlist PeerListQueue[MAX_PEERPROSPECTS];
 int peerlistopenslot = 0;
 int peerlistnum = 0;
 struct bootstrap_storage Bootstrap;
+gchar *workdir;
 gchar *torrentdir;
 
 /******************************************************************************
@@ -202,16 +203,8 @@ gboolean RestartDHT (void)
 	int num = 6, num6 = 6;
 	int i;
 
-	fprintf(dht_debug, "\n******************************\n");
-	fflush(dht_debug);
-	fprintf(dht_debug, "Restarting DHT......\n");
-	fflush(dht_debug);
-	fprintf(dht_debug, "******************************\n");
-	fflush(dht_debug);
 	// collect some known nodes
 	i = dht_get_nodes(sin, &num, sin6, &num6);
-	fprintf(dht_debug, "Saving %d (%d + %d) as bootstrap nodes.\n", i, num, num6);
-	fflush(dht_debug);
 	if (num > 0)
 	{
 		int ctr = 0;
@@ -232,11 +225,18 @@ gboolean RestartDHT (void)
 		}
 		Bootstrap.numofIPv6s = ctr;
 	}
-
 	// stop thread
 	dhtloop = FALSE;
+	//pause to let dht close down
 	sleep(30);
-
+	// send reset messages
+	fprintf(dht_debug, " \n \n \n \n******************************\n");
+	fflush(dht_debug);
+	fprintf(dht_debug, "Restarting DHT......\n");
+	fflush(dht_debug);
+	fprintf(dht_debug, "******************************\n");
+	fflush(dht_debug);
+	fflush(dht_debug);
 	// reset stuff
 	dhtloop = TRUE;
 	s = -1;
@@ -405,7 +405,7 @@ gint GetMetadataThread (void)
 												int sent2 = 0;
 												int msgsize2 = 0;
 
-												fprintf(bt_display, "Attempting to get metadata piece %i\n", counter);
+												fprintf(bt_display, "Attempting to get metadata piece %i\n",  counter);
 												fflush(bt_display);
 												// clear buffer
 												memset(&msgbuffer[0], 0x0, MSGBUFFERSIZE); 
@@ -494,7 +494,7 @@ gint GetMetadataThread (void)
 												
 												fprintf(bt_display, "Metadata captured!!    Disconnecting peer.\n");
 												fflush(bt_display);
-												fprintf(bt_display, "Metadata saved to ~/.dhtdigg/%s\n", filenamebase);
+												fprintf(bt_display, "Metadata saved to %s\n", filenamebase);
 												fflush(bt_display);
 											}
 										}
@@ -862,54 +862,59 @@ gint DhtThread(void)
 
 	// init dht
 	dht_init(s, s6, myid, (unsigned char*)"digg");
-
+	// setup bootstrap
 	if(s >= 0) 
 	{
 		if (Bootstrap.numofIPv4s > 0)
 		{
-			// ping saved nodes here
+			// seed with saved IPv4 nodes
 			int ctr = 0;
 
+			fprintf(dht_debug, "Seeding IPv4 with %i saved nodes.\n", Bootstrap.numofIPv4s);
+			fflush(dht_debug);
 			for (ctr = 0; ctr < Bootstrap.numofIPv4s;  ctr++)
 			{
-				fprintf(dht_debug, "Pinging saved IPv4 node.\n");
-				fflush(dht_debug);
-				dht_ping_node( (struct sockaddr*) &Bootstrap.IPv4bootnodes[ctr], 
+				dht_insert_node(seedid,(struct sockaddr*) &Bootstrap.IPv4bootnodes[ctr], 
 				              sizeof(struct sockaddr_in));
 			}
 		}
-		fprintf(dht_debug, "Seeding IPv4 with dht.transmissionbt.com node.\n");
-		fflush(dht_debug);
-		memset(&Seed, 0, sizeof(Seed));
-		Seed.sin_family = AF_INET;         
-		Seed.sin_port = htons(6881); 
-		inet_pton(AF_INET, "87.98.162.88", &(Seed.sin_addr.s_addr));
-		dht_insert_node(seedid, (struct sockaddr*) &Seed, sizeof(Seed));
+		else
+		{
+			fprintf(dht_debug, "Seeding IPv4 with dht.transmissionbt.com node.\n");
+			fflush(dht_debug);
+			memset(&Seed, 0, sizeof(Seed));
+			Seed.sin_family = AF_INET;         
+			Seed.sin_port = htons(6881); 
+			inet_pton(AF_INET, "87.98.162.88", &(Seed.sin_addr.s_addr));
+			dht_insert_node(seedid, (struct sockaddr*) &Seed, sizeof(Seed));
+		}
 	}
 
 	if(s6 >= 0)
 	{
-
 		if (Bootstrap.numofIPv6s > 0)
 		{
-			// ping saved nodes here
+			// seed with saved IPv6 nodes
 			int ctr = 0;
 
+			fprintf(dht_debug, "Seeding IPv6 with %i saved nodes.\n", Bootstrap.numofIPv6s);
+			fflush(dht_debug);
 			for (ctr = 0; ctr < Bootstrap.numofIPv6s;  ctr++)
 			{
-				fprintf(dht_debug, "Pinging saved IPv6 node.\n");
-				fflush(dht_debug);
-				dht_ping_node((struct sockaddr*) &Bootstrap.IPv6bootnodes[ctr], 
+				dht_insert_node(seedid, (struct sockaddr*) &Bootstrap.IPv6bootnodes[ctr], 
 				              sizeof(struct sockaddr_in6));
 			}
 		}
-		fprintf(dht_debug, "Seeding IPv6 with dht.transmissionbt.com node.\n");
-		fflush(dht_debug);
-		memset(&Seed6, 0, sizeof(Seed6));
-		Seed6.sin6_family = AF_INET6;         
-		Seed6.sin6_port = htons(6881); 
-		inet_pton(AF_INET6, "2001:41d0:c:5ac:5::1", &(Seed6.sin6_addr));
-		dht_insert_node(seedid, (struct sockaddr*) &Seed6, sizeof(Seed6));
+		else
+		{
+			fprintf(dht_debug, "Seeding IPv6 with dht.transmissionbt.com node.\n");
+			fflush(dht_debug);
+			memset(&Seed6, 0, sizeof(Seed6));
+			Seed6.sin6_family = AF_INET6;         
+			Seed6.sin6_port = htons(6881); 
+			inet_pton(AF_INET6, "2001:41d0:c:5ac:5::1", &(Seed6.sin6_addr));
+			dht_insert_node(seedid, (struct sockaddr*) &Seed6, sizeof(Seed6));
+		}
 	}
 	// start dht loop
 	while(dhtloop) 
@@ -975,8 +980,48 @@ gint DhtThread(void)
  ****************************************************************************/
 void MainWindowDestroy (GtkWidget *widget, gpointer data)
 {
+	struct sockaddr_in sin[6];
+	struct sockaddr_in6 sin6[6];
+	int num = 6, num6 = 6;
+	char bsfile[PATH_MAX];
+	int  bsfile_fd;
+    int i;
+	
+	// collect some known nodes
+	i = dht_get_nodes(sin, &num, sin6, &num6);
+	if (num > 0)
+	{
+		int ctr = 0;
+		while (ctr < num)
+		{
+			memcpy(&Bootstrap.IPv4bootnodes[ctr], &sin[ctr], sizeof(struct sockaddr_in));
+			ctr++;
+		}
+		Bootstrap.numofIPv4s = ctr;
+	}
+	if (num6 > 0)
+	{
+		int ctr = 0;
+		while (ctr < num6)
+		{
+			memcpy(&Bootstrap.IPv6bootnodes[ctr], &sin6[ctr], sizeof(struct sockaddr_in6));
+			ctr++;
+		}
+		Bootstrap.numofIPv6s = ctr;
+	}
+	// set filename
+	sprintf(bsfile, "%sdhtdigg.bs", workdir);
+	// create & write bootstrap file
+	bsfile_fd = open(bsfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG
+                 | S_IRWXO);
+	write(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
+	fsync(bsfile_fd);
+	close(bsfile_fd);
+	// kill loops 
 	dhtloop = FALSE;
 	getmetadataloop = FALSE;
+	sleep(3);
+	// kill gtk loop
 	gtk_main_quit ();
 }
 /****************************************************************************
@@ -1030,6 +1075,7 @@ int main (int argc, char *argv[])
 {
 	GtkWidget *window;
 	int flags;
+	gchar *bsfilename;
 
 	// init gtk
 	gtk_init (&argc, &argv);
@@ -1046,7 +1092,6 @@ int main (int argc, char *argv[])
 	fcntl(dhtpipe[0], F_SETFL, flags | O_NONBLOCK);
 	// redirect dht_debug to the pipe
 	dht_debug = fdopen(dhtpipe[1], "w");
-
 	// create pipe for BT messages
 	pipe(btpipe);
 	// set read side to non-blocking
@@ -1054,15 +1099,33 @@ int main (int argc, char *argv[])
 	fcntl(btpipe[0], F_SETFL, flags | O_NONBLOCK);
 	// open pipe
 	bt_display = fdopen(btpipe[1], "w");
-	
-	// clear queues
+	// clear queue
 	memset(&PeerListQueue, 0, sizeof(PeerListQueue));
-	memset(&Bootstrap, 0, sizeof(Bootstrap));
-
-	// set our torrent directory
-	torrentdir = g_strconcat (g_get_home_dir (), "/.dhtdigg/", NULL);
+	// set work directory
+	workdir = g_strconcat (g_get_home_dir (), "/.dhtdigg/", NULL);
 	// make sure work directory exists
+	if (stat(workdir, &st) == -1) mkdir(workdir, 0700);
+	// set torrent directory
+	torrentdir = g_strconcat (workdir, "torrents/", NULL);
+	// make sure torrent directory exists
 	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
+
+
+	// clear bootstrap storage
+	memset(&Bootstrap, 0, sizeof(Bootstrap));
+	//set bootstrap  file name
+	bsfilename = g_strconcat (workdir, "dhtdigg.bs", NULL);
+	if (stat(bsfilename, &st) == 0) 
+	{
+		int bsfile_fd;
+
+		// open bootstrap file
+		bsfile_fd = open(bsfilename, O_RDONLY, S_IRWXU | S_IRWXG
+		                 | S_IRWXO);
+		read(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
+		close(bsfile_fd);
+	}
+
 	fprintf(bt_display, "Setting torrent directory to %s\n", torrentdir);
 	fflush(bt_display);
 	fprintf(bt_display, "Waiting for DHT to populate. This could take 10 minutes or so....\n");
