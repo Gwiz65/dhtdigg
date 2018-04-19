@@ -53,6 +53,55 @@ struct bootstrap_storage Bootstrap;
 gchar *workdir;
 gchar *torrentdir;
 
+
+/******************************************************************************
+ *                                                                            *
+ * Function: WriteBootstrapFile                                               *
+ *                                                                            *
+ * Purpose : collects some nodes and writes them to bootstrap file            *
+ *                                                                            *
+ ******************************************************************************/
+gboolean WriteBootstrapFile(void)
+{
+	struct sockaddr_in sin[6];
+	struct sockaddr_in6 sin6[6];
+	int num = 6, num6 = 6;
+	char bsfile[PATH_MAX];
+	int  bsfile_fd;
+	
+	// collect some known nodes
+	dht_get_nodes(sin, &num, sin6, &num6);
+	if (num > 0)
+	{
+		int ctr = 0;
+		while (ctr < num)
+		{
+			memcpy(&Bootstrap.IPv4bootnodes[ctr], &sin[ctr], sizeof(struct sockaddr_in));
+			ctr++;
+		}
+		Bootstrap.numofIPv4s = ctr;
+	}
+	if (num6 > 0)
+	{
+		int ctr = 0;
+		while (ctr < num6)
+		{
+			memcpy(&Bootstrap.IPv6bootnodes[ctr], &sin6[ctr], sizeof(struct sockaddr_in6));
+			ctr++;
+		}
+		Bootstrap.numofIPv6s = ctr;
+	}
+	// set filename
+	sprintf(bsfile, "%sdhtdigg.bs", workdir);
+	// create & write bootstrap file
+	bsfile_fd = open(bsfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG
+                 | S_IRWXO);
+	write(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
+	fsync(bsfile_fd);
+	close(bsfile_fd);
+	return FALSE; // run once
+}
+
 /******************************************************************************
  *                                                                            *
  * Function: SendBTmsg                                                        *
@@ -198,33 +247,7 @@ int TimedConnect(int sockfd, const struct sockaddr *addr, socklen_t addrlen, int
  ******************************************************************************/
 gboolean RestartDHT (void)
 {
-	struct sockaddr_in sin[6];
-	struct sockaddr_in6 sin6[6];
-	int num = 6, num6 = 6;
-	int i;
-
-	// collect some known nodes
-	i = dht_get_nodes(sin, &num, sin6, &num6);
-	if (num > 0)
-	{
-		int ctr = 0;
-		while (ctr < num)
-		{
-			memcpy(&Bootstrap.IPv4bootnodes[ctr], &sin[ctr], sizeof(struct sockaddr_in));
-			ctr++;
-		}
-		Bootstrap.numofIPv4s = ctr;
-	}
-	if (num6 > 0)
-	{
-		int ctr = 0;
-		while (ctr < num6)
-		{
-			memcpy(&Bootstrap.IPv6bootnodes[ctr], &sin6[ctr], sizeof(struct sockaddr_in6));
-			ctr++;
-		}
-		Bootstrap.numofIPv6s = ctr;
-	}
+	WriteBootstrapFile();
 	// stop thread
 	dhtloop = FALSE;
 	//pause to let dht close down
@@ -980,47 +1003,9 @@ gint DhtThread(void)
  ****************************************************************************/
 void MainWindowDestroy (GtkWidget *widget, gpointer data)
 {
-	struct sockaddr_in sin[6];
-	struct sockaddr_in6 sin6[6];
-	int num = 6, num6 = 6;
-	char bsfile[PATH_MAX];
-	int  bsfile_fd;
-    int i;
-	
-	// collect some known nodes
-	i = dht_get_nodes(sin, &num, sin6, &num6);
-	if (num > 0)
-	{
-		int ctr = 0;
-		while (ctr < num)
-		{
-			memcpy(&Bootstrap.IPv4bootnodes[ctr], &sin[ctr], sizeof(struct sockaddr_in));
-			ctr++;
-		}
-		Bootstrap.numofIPv4s = ctr;
-	}
-	if (num6 > 0)
-	{
-		int ctr = 0;
-		while (ctr < num6)
-		{
-			memcpy(&Bootstrap.IPv6bootnodes[ctr], &sin6[ctr], sizeof(struct sockaddr_in6));
-			ctr++;
-		}
-		Bootstrap.numofIPv6s = ctr;
-	}
-	// set filename
-	sprintf(bsfile, "%sdhtdigg.bs", workdir);
-	// create & write bootstrap file
-	bsfile_fd = open(bsfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG
-                 | S_IRWXO);
-	write(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
-	fsync(bsfile_fd);
-	close(bsfile_fd);
 	// kill loops 
 	dhtloop = FALSE;
 	getmetadataloop = FALSE;
-	sleep(3);
 	// kill gtk loop
 	gtk_main_quit ();
 }
@@ -1109,8 +1094,6 @@ int main (int argc, char *argv[])
 	torrentdir = g_strconcat (workdir, "torrents/", NULL);
 	// make sure torrent directory exists
 	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
-
-
 	// clear bootstrap storage
 	memset(&Bootstrap, 0, sizeof(Bootstrap));
 	//set bootstrap  file name
@@ -1125,7 +1108,6 @@ int main (int argc, char *argv[])
 		read(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
 		close(bsfile_fd);
 	}
-
 	fprintf(bt_display, "Setting torrent directory to %s\n", torrentdir);
 	fflush(bt_display);
 	fprintf(bt_display, "Waiting for DHT to populate. This could take 10 minutes or so....\n");
@@ -1138,6 +1120,8 @@ int main (int argc, char *argv[])
 	g_thread_new ("getmetadatathread", (GThreadFunc) GetMetadataThread, NULL);
 	// dht restart timer 32 minutes
 	gdk_threads_add_timeout_seconds (1920, (GSourceFunc) RestartDHT, NULL);
+	// autosave bootstrap after 2 minutes
+	gdk_threads_add_timeout_seconds (120, (GSourceFunc) WriteBootstrapFile, NULL);
 	// start main loop
 	gtk_main ();
 	return 0;
