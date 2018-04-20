@@ -68,9 +68,10 @@ gboolean WriteBootstrapFile(void)
 	int num = 6, num6 = 6;
 	char bsfile[PATH_MAX];
 	int  bsfile_fd;
+	int numnodes;
 	
 	// collect some known nodes
-	dht_get_nodes(sin, &num, sin6, &num6);
+	numnodes = dht_get_nodes(sin, &num, sin6, &num6);
 	if (num > 0)
 	{
 		int ctr = 0;
@@ -99,6 +100,8 @@ gboolean WriteBootstrapFile(void)
 	write(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
 	fsync(bsfile_fd);
 	close(bsfile_fd);
+	fprintf(dht_debug, "Saving %i nodes to bootstrap file.\n", numnodes);
+	fflush(dht_debug);
 	return FALSE; // run once
 }
 
@@ -1114,10 +1117,10 @@ int main (int argc, char *argv[])
 	fflush(bt_display);
 	// start dht thread
 	g_thread_new ("dhtthread", (GThreadFunc) DhtThread, NULL);
-	// start read messages thread
-	gdk_threads_add_timeout (50, (GSourceFunc) ReadMessages, NULL);
 	// start getmetadata thread
 	g_thread_new ("getmetadatathread", (GThreadFunc) GetMetadataThread, NULL);
+	// start read messages thread
+	gdk_threads_add_timeout (50, (GSourceFunc) ReadMessages, NULL);
 	// dht restart timer 32 minutes
 	gdk_threads_add_timeout_seconds (1920, (GSourceFunc) RestartDHT, NULL);
 	// autosave bootstrap after 2 minutes
