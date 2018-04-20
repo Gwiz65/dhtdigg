@@ -39,4 +39,18 @@ TODO:
  - Currently not capturing IPv6 peers.
                                          
 
+ Installation
+==============
+Extract source archive to a directory and 'cd' to that directory and type:
+	'autoreconf -i --force'
+	'./configure'
+	'make'
+
+As root type:
+	'make install'
+
+To uninstall, as root type:
+	'make uninstall'
+
+Run (as regular user) by typing: 'dhtdigg'
 
