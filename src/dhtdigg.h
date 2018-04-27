@@ -29,6 +29,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <openssl/sha.h>
+#include <dirent.h>
+#include <ctype.h>
 
 #include "dht.h"
 #include "crypt3.h"
