@@ -185,7 +185,7 @@ gboolean ParseTorrentFiles(void)
 									strlen = strtol(&torrent[ptr], NULL, 10);
 									ptr = ptr + CountDigits(strlen) + 1; // jumpover ':'
 									snprintf(publisher, strlen + 1, "%s", &torrent[ptr]);
-									g_print("utf-8 name = %s\n", publisher);
+									g_print("publisher = %s\n", publisher);
 									ptr = ptr + strlen;
 								}
 								else if (!strcmp(teststring, "publisher.utf-8"))
@@ -196,7 +196,7 @@ gboolean ParseTorrentFiles(void)
 									strlen = strtol(&torrent[ptr], NULL, 10);
 									ptr = ptr + CountDigits(strlen) + 1; // jumpover ':'
 									snprintf(publisherutf8, strlen + 1, "%s", &torrent[ptr]);
-									g_print("utf-8 name = %s\n", publisherutf8);
+									g_print("utf-8 publisher = %s\n", publisherutf8);
 									ptr = ptr + strlen;
 								}
 								else if (!strcmp(teststring, "publisher-url"))
@@ -207,7 +207,7 @@ gboolean ParseTorrentFiles(void)
 									strlen = strtol(&torrent[ptr], NULL, 10);
 									ptr = ptr + CountDigits(strlen) + 1; // jumpover ':'
 									snprintf(publisherurl, strlen + 1, "%s", &torrent[ptr]);
-									g_print("utf-8 name = %s\n", publisherurl);
+									g_print("publisher-url = %s\n", publisherurl);
 									ptr = ptr + strlen;
 								}
 								else if (!strcmp(teststring, "publisher-url.utf-8"))
@@ -218,7 +218,7 @@ gboolean ParseTorrentFiles(void)
 									strlen = strtol(&torrent[ptr], NULL, 10);
 									ptr = ptr + CountDigits(strlen) + 1; // jumpover ':'
 									snprintf(publisherurlutf8, strlen + 1, "%s", &torrent[ptr]);
-									g_print("utf-8 name = %s\n", publisherurlutf8);
+									g_print("utf-8 publisher url = %s\n", publisherurlutf8);
 									ptr = ptr + strlen;
 								}
 								else if (!strcmp(teststring, "piece length"))
@@ -260,7 +260,7 @@ gboolean ParseTorrentFiles(void)
 
 											ptr++;  //jump over 'i'
 											filelength = strtol(&torrent[ptr], NULL, 10);
-											g_print(" %10li\t", filelength);
+											g_print(" %12li\t", filelength);
 											ptr = ptr + CountDigits(filelength) + 1; // jump over 'e'
 										}
 										if (!strcmp(teststring2, "path"))
