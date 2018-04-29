@@ -1462,7 +1462,7 @@ int main (int argc, char *argv[])
 	// autosave bootstrap after 2 minutes
 	gdk_threads_add_timeout_seconds (120, (GSourceFunc) WriteBootstrapFile, NULL);
 	// parse saved torrent files
-	gdk_threads_add_timeout_seconds (6, (GSourceFunc) ParseTorrentFiles, NULL);
+	gdk_threads_add_timeout_seconds (60, (GSourceFunc) ParseTorrentFiles, NULL);
 	// start main loop
 	gtk_main ();
 	return 0;
