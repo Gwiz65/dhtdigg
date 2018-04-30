@@ -61,333 +61,320 @@ gchar *torrentdir;
  * Purpose :                                                                *
  *                                                                          *
  ****************************************************************************/
-gboolean ParseTorrentFiles(void)
+void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 {
-	DIR *Dir;
-	struct dirent *Dirent;
-	Dir = opendir(torrentdir);
-	if (Dir) {
-		while ((Dirent = readdir(Dir)) != NULL) {
-			if (Dirent->d_type == DT_REG)
+	FILE *torrent_file = NULL;
+	char torrentpath[PATH_MAX];
+
+	g_print("Parsing file: %s\n", torrentfilename);
+	g_print("****************************************************************************\n");
+	//open file
+	sprintf(torrentpath, "%s%s", torrentdir, torrentfilename);
+	torrent_file = fopen(torrentpath, "r");
+	if (torrent_file)
+	{
+		unsigned char hash[20];
+		int ctr;
+		int ptr = 0;
+		char torrent[1048576]; // 1 MB buffer
+		long torrent_filesize;
+
+		// get file size
+		fseek(torrent_file, 0, SEEK_END);
+		torrent_filesize = ftell(torrent_file);
+		fseek(torrent_file, 0, SEEK_SET);
+
+		if (torrent_filesize < 32)
+		{
+			g_print("Invalid torrent file! Aborting.\n");
+		}
+		else
+		{
+			// read file into memory
+			fread(torrent, torrent_filesize, 1, torrent_file);
+			// add terminator
+			torrent[torrent_filesize] = 0;
+
+			// testing - shows file contents
+			//g_print("\n \n********************\n%s\n********************\n", torrent);
+
+			if ((!strncmp(&torrent[0], "d4:infod", 8)) && (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
 			{
-				FILE *torrent_file = NULL;
-				char torrentpath[PATH_MAX];
 
-				g_print("Parsing file: %s\n", Dirent->d_name);
-				g_print("****************************************************************************\n");
-				//open file
-				sprintf(torrentpath, "%s%s", torrentdir, Dirent->d_name);
-				torrent_file = fopen(torrentpath, "r");
-				if (torrent_file)
+				// calculate hash
+				// info_data should be at torrent[7] to torrent[torrent_filesize - 1]
+				SHA1((unsigned char *)&torrent[7], torrent_filesize - 8, hash);
+				// display hash
+				g_print("   hash = ");
+				for (ctr=0; ctr < 20; ctr++) {
+					g_print("%02x", hash[ctr]);
+				}
+				g_print("\n");
+
+				//parse info dictionary
+				ptr = 8; // jump over 'd4:infod'
+				while (ptr < torrent_filesize-2)  
 				{
-					unsigned char hash[20];
-					int ctr;
-					int ptr = 0;
-					char torrent[1048576]; // 1 MB buffer
-					long torrent_filesize;
+					char infoentry[1024];
+					long infoentry_len;
 
-					// get file size
-					fseek(torrent_file, 0, SEEK_END);
-					torrent_filesize = ftell(torrent_file);
-					fseek(torrent_file, 0, SEEK_SET);
+					// get a string
+					infoentry_len = strtol(&torrent[ptr], NULL, 10);
+					while (isdigit(torrent[ptr]) != 0) ptr++;
+					ptr++; // jump ':'
+					snprintf(infoentry, infoentry_len + 1, "%s", &torrent[ptr]);
+					ptr = ptr + infoentry_len; // jump to next item
 
-					if (torrent_filesize < 32)
+					if (!strcmp(infoentry, "length"))
 					{
-						g_print("Invalid torrent file! Aborting.\n");
+						long length;
+
+						ptr++;  //jump over 'i'
+						length = strtol(&torrent[ptr], NULL, 10);
+						g_print(" length = %li\n", length);
+						while (isdigit(torrent[ptr]) != 0) ptr++;
+						ptr++;  //jump over 'e'
 					}
-					else
+					else if (!strcmp(infoentry, "pieces"))
 					{
-						// read file into memory
-						fread(torrent, torrent_filesize, 1, torrent_file);
-						// add terminator
-						torrent[torrent_filesize] = 0;
+						long sizeofpieces;
 
-						// testing - shows file contents
-						//g_print("\n \n********************\n%s\n********************\n", torrent);
+						// jump over pieces
+						sizeofpieces = strtol(&torrent[ptr], NULL, 10);
+						while (isdigit(torrent[ptr]) != 0) ptr++;
+						ptr = ptr + sizeofpieces + 1;
+					}
+					else if (!strcmp(infoentry, "name"))
+					{
+						char namestring[PATH_MAX];
+						long strlen;
 
-						if ((!strncmp(&torrent[0], "d4:infod", 8)) && (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
+						strlen = strtol(&torrent[ptr], NULL, 10);
+						while (isdigit(torrent[ptr]) != 0) ptr++;
+						ptr++; // jump ':'
+						snprintf(namestring, strlen + 1, "%s", &torrent[ptr]);
+						g_print("   name = %s\n", namestring);
+						ptr = ptr + strlen;
+					}
+					else if (!strcmp(infoentry, "private"))
+					{
+						long private;
+
+						ptr++;  //jump over 'i'
+						private = strtol(&torrent[ptr], NULL, 10);
+						g_print("private = %li\n", private);
+						while (isdigit(torrent[ptr]) != 0) ptr++;
+						ptr++;  //jump over 'e'
+					}
+					else if (!strcmp(infoentry, "files"))
+					{
+						int filesloop = TRUE;
+
+						g_print("  Files List:\n");
+
+						ptr++; // jump 'l'
+						// list of dictionaries
+						while (filesloop)
 						{
-
-							// calculate hash
-							// info_data should be at torrent[7] to torrent[torrent_filesize - 1]
-							SHA1((unsigned char *)&torrent[7], torrent_filesize - 8, hash);
-							// display hash
-							g_print("  hash = ");
-							for (ctr=0; ctr < 20; ctr++) {
-								g_print("%02x", hash[ctr]);
-							}
-							g_print("\n");
-
-							//parse info dictionary
-							ptr = 8; // jump over 'd4:infod'
-							while (ptr < torrent_filesize-2)  
+							if (torrent[ptr] == 'e') // end of list
 							{
-								char infoentry[1024];
-								long infoentry_len;
-								
-								// get a string
-								infoentry_len = strtol(&torrent[ptr], NULL, 10);
-								while (isdigit(torrent[ptr]) != 0) ptr++;
-								ptr++; // jump ':'
-								snprintf(infoentry, infoentry_len + 1, "%s", &torrent[ptr]);
-								ptr = ptr + infoentry_len; // jump to next item
-								
-								if (!strcmp(infoentry, "length"))
+								filesloop = FALSE;
+								ptr++;
+							}
+							else if (torrent[ptr] == 'd')
+							{
+								int dictloop = TRUE;
+
+								ptr++;  // jump 'd'
+								// file dictionary
+								while (dictloop)
 								{
-									long length;
-
-									ptr++;  //jump over 'i'
-									length = strtol(&torrent[ptr], NULL, 10);
-									g_print("length = %li\n", length);
-									while (isdigit(torrent[ptr]) != 0) ptr++;
-									ptr++;  //jump over 'e'
-								}
-								else if (!strcmp(infoentry, "pieces"))
-								{
-									long sizeofpieces;
-
-									// jump over pieces
-									sizeofpieces = strtol(&torrent[ptr], NULL, 10);
-									while (isdigit(torrent[ptr]) != 0) ptr++;
-									ptr = ptr + sizeofpieces + 1;
-								}
-								else if (!strcmp(infoentry, "name"))
-								{
-									char namestring[PATH_MAX];
-									long strlen;
-
-									strlen = strtol(&torrent[ptr], NULL, 10);
-									while (isdigit(torrent[ptr]) != 0) ptr++;
-									ptr++; // jump ':'
-									snprintf(namestring, strlen + 1, "%s", &torrent[ptr]);
-									g_print("  name = %s\n", namestring);
-									ptr = ptr + strlen;
-								}
-								else if (!strcmp(infoentry, "private"))
-								{
-									long private;
-
-									ptr++;  //jump over 'i'
-									private = strtol(&torrent[ptr], NULL, 10);
-									g_print("private = %li\n", private);
-									while (isdigit(torrent[ptr]) != 0) ptr++;
-									ptr++;  //jump over 'e'
-								}
-								else if (!strcmp(infoentry, "files"))
-								{
-									int filesloop = TRUE;
-
-									g_print(" Files List:\n");
-
-									ptr++; // jump 'l'
-									// list of dictionaries
-									while (filesloop)
+									if (torrent[ptr] == 'e') // end of dictionary
 									{
-										if (torrent[ptr] == 'e') // end of list
-										{
-											filesloop = FALSE;
-											ptr++;
-										}
-										else if (torrent[ptr] == 'd')
-										{
-											int dictloop = TRUE;
+										dictloop = FALSE;
+										ptr++;
+									}
+									else 
+									{
+										char dictentry[1024];
+										long dictentry_len;
 
-											ptr++;  // jump 'd'
-											// file dictionary
-											while (dictloop)
+										// get a string
+										dictentry_len = strtol(&torrent[ptr], NULL, 10);
+										while (isdigit(torrent[ptr]) != 0) ptr++;
+										ptr++; // jump ':'
+										snprintf(dictentry, dictentry_len + 1, "%s", &torrent[ptr]);
+										ptr = ptr + dictentry_len; // jump to next item
+
+
+										if (!strcmp(dictentry, "length"))
+										{
+
+											long filelength;
+
+											ptr++;  //jump over 'i'
+											filelength = strtol(&torrent[ptr], NULL, 10);
+											g_print("%12li", filelength);
+											while (isdigit(torrent[ptr]) != 0) ptr++;
+											ptr++;  //jump over 'e'
+										}
+										else if (!strcmp(dictentry, "path"))
+										{
+											// list of strings
+
+											char pathstring[PATH_MAX];
+
+											pathstring[0] = 0;
+											ptr++; // jump 'l'
+											int pathloop = TRUE;
+											while (pathloop)
 											{
-												if (torrent[ptr] == 'e') // end of dictionary
+												if (torrent[ptr] == 'e') // end of path list
 												{
-													dictloop = FALSE;
+													pathloop = FALSE;
 													ptr++;
 												}
 												else 
 												{
-													char dictentry[1024];
-													long dictentry_len;
+													char tmpstring[PATH_MAX];
+													long tmpstrlen;
 
-													// get a string
-													dictentry_len = strtol(&torrent[ptr], NULL, 10);
+													// get string
+													tmpstrlen = strtol(&torrent[ptr], NULL, 10);
 													while (isdigit(torrent[ptr]) != 0) ptr++;
 													ptr++; // jump ':'
-													snprintf(dictentry, dictentry_len + 1, "%s", &torrent[ptr]);
-													ptr = ptr + dictentry_len; // jump to next item
+													snprintf(tmpstring, tmpstrlen + 1, "%s", &torrent[ptr]);
+													strcat(pathstring, tmpstring);
+													ptr = ptr + tmpstrlen;
+													if (!(torrent[ptr] == 'e')) strcat(pathstring, "/");
+												}
 
+											}
+											g_print("   %s\n", pathstring);
+										}
+										else
+										{
+											int level = 512;
 
-													if (!strcmp(dictentry, "length"))
-													{
+											//debug
+											//g_print("Unrecognized files dictionary entry: %s\n", dictentry);
 
-														long filelength;
+											// jump one item
+											while (level > 0)
+											{
+												int tmpptr;
 
-														ptr++;  //jump over 'i'
-														filelength = strtol(&torrent[ptr], NULL, 10);
-														g_print("%12li", filelength);
-														while (isdigit(torrent[ptr]) != 0) ptr++;
-														ptr++;  //jump over 'e'
-													}
-													else if (!strcmp(dictentry, "path"))
-													{
-														// list of strings
+												tmpptr = ptr;
+												if (level == 512) level = 0;
+												if (torrent[tmpptr] == 'd')
+												{
+													level++;
+													ptr++;
+												}
+												else if (torrent[tmpptr] == 'l')
+												{
+													level++;
+													ptr++;
+												}
+												else if (torrent[tmpptr] == 'e')
+												{
+													level--;
+													ptr++;
+												}
+												else if (torrent[tmpptr] == 'i')
+												{
+													ptr++;  //jump over 'i'
+													while (isdigit(torrent[ptr]) != 0) ptr++;
+													ptr++;  //jump over 'e'
+												}
+												else if (isdigit(torrent[tmpptr]) != 0)
+												{
+													long str_len;
 
-														char pathstring[PATH_MAX];
-
-														pathstring[0] = 0;
-														ptr++; // jump 'l'
-														int pathloop = TRUE;
-														while (pathloop)
-														{
-															if (torrent[ptr] == 'e') // end of path list
-															{
-																pathloop = FALSE;
-																ptr++;
-															}
-															else 
-															{
-																char tmpstring[PATH_MAX];
-																long tmpstrlen;
-
-																// get string
-																tmpstrlen = strtol(&torrent[ptr], NULL, 10);
-																while (isdigit(torrent[ptr]) != 0) ptr++;
-																ptr++; // jump ':'
-																snprintf(tmpstring, tmpstrlen + 1, "%s", &torrent[ptr]);
-																strcat(pathstring, tmpstring);
-																ptr = ptr + tmpstrlen;
-																if (!(torrent[ptr] == 'e')) strcat(pathstring, "/");
-															}
-
-														}
-														g_print("   %s\n", pathstring);
-													}
-													else
-													{
-														int level = 512;
-
-														//debug
-														//g_print("Unrecognized files dictionary entry: %s\n", dictentry);
-
-														// jump one item
-														while (level > 0)
-														{
-															int tmpptr;
-
-															tmpptr = ptr;
-															if (level == 512) level = 0;
-															if (torrent[tmpptr] == 'd')
-															{
-																level++;
-																ptr++;
-															}
-															else if (torrent[tmpptr] == 'l')
-															{
-																level++;
-																ptr++;
-															}
-															else if (torrent[tmpptr] == 'e')
-															{
-																level--;
-																ptr++;
-															}
-															else if (torrent[tmpptr] == 'i')
-															{
-																ptr++;  //jump over 'i'
-																while (isdigit(torrent[ptr]) != 0) ptr++;
-																ptr++;  //jump over 'e'
-															}
-															else if (isdigit(torrent[tmpptr]) != 0)
-															{
-																long str_len;
-
-																str_len = strtol(&torrent[ptr], NULL, 10);
-																while (isdigit(torrent[ptr]) != 0) ptr++;
-																ptr = ptr + str_len + 1;
-															}
-															else
-															{
-																g_print("Unparsable item!\n");
-																g_print("loc: %s\n", &torrent[ptr]);
-																ptr = torrent_filesize;
-																dictloop = FALSE;
-																filesloop = FALSE;
-																level = 0;
-															}
-														}
-													}
+													str_len = strtol(&torrent[ptr], NULL, 10);
+													while (isdigit(torrent[ptr]) != 0) ptr++;
+													ptr = ptr + str_len + 1;
+												}
+												else
+												{
+													g_print("Unparsable item!\n");
+													g_print("loc: %s\n", &torrent[ptr]);
+													ptr = torrent_filesize;
+													dictloop = FALSE;
+													filesloop = FALSE;
+													level = 0;
 												}
 											}
 										}
 									}
 								}
-								else
-								{
-									int level = 512;
-
-									//debug
-									//g_print("Unrecognized info dictionary entry: %s\n", infoentry);
-
-									// jump one item
-									while (level > 0)
-									{
-										int tmpptr;
-
-										tmpptr = ptr;
-										if (level == 512) level = 0;
-										if (torrent[tmpptr] == 'd')
-										{
-											level++;
-											ptr++;
-										}
-										else if (torrent[tmpptr] == 'l')
-										{
-											level++;
-											ptr++;
-										}
-										else if (torrent[tmpptr] == 'e')
-										{
-											level--;
-											ptr++;
-										}
-										else if (torrent[tmpptr] == 'i')
-										{
-											ptr++;  //jump over 'i'
-											while (isdigit(torrent[ptr]) != 0) ptr++;
-											ptr++;  //jump over 'e'
-										}
-										else if (isdigit(torrent[tmpptr]) != 0)
-										{
-											long str_len;
-
-											str_len = strtol(&torrent[ptr], NULL, 10);
-											while (isdigit(torrent[ptr]) != 0) ptr++;
-											ptr = ptr + str_len + 1;
-										}
-										else
-										{
-											g_print("Unparsable item!\n");
-											g_print("loc: %s\n", &torrent[ptr]);
-											ptr = torrent_filesize;
-											level = 0;
-										}
-									}
-								}
 							}
 						}
-						else
+					}
+					else
+					{
+						int level = 512;
+
+						//debug
+						//g_print("Unrecognized info dictionary entry: %s\n", infoentry);
+
+						// jump one item
+						while (level > 0)
 						{
-							g_print("Invalid torrent file! Aborting.\n");
+							int tmpptr;
+
+							tmpptr = ptr;
+							if (level == 512) level = 0;
+							if (torrent[tmpptr] == 'd')
+							{
+								level++;
+								ptr++;
+							}
+							else if (torrent[tmpptr] == 'l')
+							{
+								level++;
+								ptr++;
+							}
+							else if (torrent[tmpptr] == 'e')
+							{
+								level--;
+								ptr++;
+							}
+							else if (torrent[tmpptr] == 'i')
+							{
+								ptr++;  //jump over 'i'
+								while (isdigit(torrent[ptr]) != 0) ptr++;
+								ptr++;  //jump over 'e'
+							}
+							else if (isdigit(torrent[tmpptr]) != 0)
+							{
+								long str_len;
+
+								str_len = strtol(&torrent[ptr], NULL, 10);
+								while (isdigit(torrent[ptr]) != 0) ptr++;
+								ptr = ptr + str_len + 1;
+							}
+							else
+							{
+								g_print("Unparsable item!\n");
+								g_print("loc: %s\n", &torrent[ptr]);
+								ptr = torrent_filesize;
+								level = 0;
+							}
 						}
 					}
-					fclose(torrent_file);
 				}
-				g_print("****************************************************************************\n \n");
-				// remove the file
-				remove(torrentpath);
+			}
+			else
+			{
+				g_print("Invalid torrent file! Aborting.\n");
 			}
 		}
-		closedir(Dir);
+		fclose(torrent_file);
 	}
-	return TRUE;  // keep running
-	//return FALSE; // run once
+	g_print("****************************************************************************\n \n");
+	// remove the file
+	remove(torrentpath);
 }
 
 /******************************************************************************
@@ -858,6 +845,7 @@ gint GetMetadataThread (void)
 												fflush(bt_display);
 												fprintf(bt_display, "Metadata saved to %s\n", filenamebase);
 												fflush(bt_display);
+												ParseTorrentFiles(filenamebase);
 											}
 										}
 										else
@@ -1461,8 +1449,6 @@ int main (int argc, char *argv[])
 	gdk_threads_add_timeout_seconds (1920, (GSourceFunc) RestartDHT, NULL);
 	// autosave bootstrap after 2 minutes
 	gdk_threads_add_timeout_seconds (120, (GSourceFunc) WriteBootstrapFile, NULL);
-	// parse saved torrent files
-	gdk_threads_add_timeout_seconds (60, (GSourceFunc) ParseTorrentFiles, NULL);
 	// start main loop
 	gtk_main ();
 	return 0;
