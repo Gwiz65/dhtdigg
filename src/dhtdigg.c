@@ -374,7 +374,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 	}
 	g_print("****************************************************************************\n \n");
 	// remove the file
-	remove(torrentpath);
+	//remove(torrentpath);
 }
 
 /******************************************************************************
