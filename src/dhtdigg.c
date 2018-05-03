@@ -120,11 +120,11 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 
 					// get a string
 					infoentry_len = strtol(&torrent[ptr], NULL, 10);
+					if (infoentry_len < 0) ptr++; // jump minus sign
 					while (isdigit(torrent[ptr]) != 0) ptr++;
 					ptr++; // jump ':'
 					snprintf(infoentry, infoentry_len + 1, "%s", &torrent[ptr]);
 					ptr = ptr + infoentry_len; // jump to next item
-
 					if (!strcmp(infoentry, "length"))
 					{
 						long length;
@@ -132,6 +132,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 						ptr++;  //jump over 'i'
 						length = strtol(&torrent[ptr], NULL, 10);
 						g_print(" length = %li\n", length);
+						if (length < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++;  //jump over 'e'
 					}
@@ -141,6 +142,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 
 						// jump over pieces
 						sizeofpieces = strtol(&torrent[ptr], NULL, 10);
+						if (sizeofpieces < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr = ptr + sizeofpieces + 1;
 					}
@@ -150,6 +152,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 						long strlen;
 
 						strlen = strtol(&torrent[ptr], NULL, 10);
+						if (strlen < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++; // jump ':'
 						snprintf(namestring, strlen + 1, "%s", &torrent[ptr]);
@@ -163,6 +166,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 						ptr++;  //jump over 'i'
 						private = strtol(&torrent[ptr], NULL, 10);
 						g_print("private = %li\n", private);
+						if (private < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++;  //jump over 'e'
 					}
@@ -171,7 +175,6 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 						int filesloop = TRUE;
 
 						g_print("  Files List:\n");
-
 						ptr++; // jump 'l'
 						// list of dictionaries
 						while (filesloop)
@@ -201,12 +204,11 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 
 										// get a string
 										dictentry_len = strtol(&torrent[ptr], NULL, 10);
+										if (dictentry_len < 0) ptr++; // jump minus sign
 										while (isdigit(torrent[ptr]) != 0) ptr++;
 										ptr++; // jump ':'
 										snprintf(dictentry, dictentry_len + 1, "%s", &torrent[ptr]);
 										ptr = ptr + dictentry_len; // jump to next item
-
-
 										if (!strcmp(dictentry, "length"))
 										{
 
@@ -215,6 +217,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 											ptr++;  //jump over 'i'
 											filelength = strtol(&torrent[ptr], NULL, 10);
 											g_print("%12li", filelength);
+											if (filelength < 0) ptr++; // jump minus sign
 											while (isdigit(torrent[ptr]) != 0) ptr++;
 											ptr++;  //jump over 'e'
 										}
@@ -241,6 +244,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 
 													// get string
 													tmpstrlen = strtol(&torrent[ptr], NULL, 10);
+													if (tmpstrlen < 0) ptr++; // jump minus sign
 													while (isdigit(torrent[ptr]) != 0) ptr++;
 													ptr++; // jump ':'
 													snprintf(tmpstring, tmpstrlen + 1, "%s", &torrent[ptr]);
@@ -248,7 +252,6 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 													ptr = ptr + tmpstrlen;
 													if (!(torrent[ptr] == 'e')) strcat(pathstring, "/");
 												}
-
 											}
 											g_print("   %s\n", pathstring);
 										}
@@ -283,7 +286,11 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 												}
 												else if (torrent[tmpptr] == 'i')
 												{
+													long somenum;
+
 													ptr++;  //jump over 'i'
+													somenum = strtol(&torrent[ptr], NULL, 10);
+													if (somenum < 0) ptr++; // jump minus sign
 													while (isdigit(torrent[ptr]) != 0) ptr++;
 													ptr++;  //jump over 'e'
 												}
@@ -292,6 +299,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 													long str_len;
 
 													str_len = strtol(&torrent[ptr], NULL, 10);
+													if (str_len < 0) ptr++; // jump minus sign
 													while (isdigit(torrent[ptr]) != 0) ptr++;
 													ptr = ptr + str_len + 1;
 												}
@@ -342,7 +350,11 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 							}
 							else if (torrent[tmpptr] == 'i')
 							{
+								long somenum;
+								
 								ptr++;  //jump over 'i'
+								somenum = strtol(&torrent[ptr], NULL, 10);
+								if (somenum < 0) ptr++; // jump minus sign
 								while (isdigit(torrent[ptr]) != 0) ptr++;
 								ptr++;  //jump over 'e'
 							}
@@ -351,6 +363,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 								long str_len;
 
 								str_len = strtol(&torrent[ptr], NULL, 10);
+								if (str_len < 0) ptr++; // jump minus sign
 								while (isdigit(torrent[ptr]) != 0) ptr++;
 								ptr = ptr + str_len + 1;
 							}
@@ -1444,4 +1457,3 @@ int main (int argc, char *argv[])
 	gtk_main ();
 	return 0;
 }
-
