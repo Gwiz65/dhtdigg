@@ -1215,55 +1215,46 @@ gint DhtThread(void)
 	// setup bootstrap
 	if(s >= 0) 
 	{
+		fprintf(dht_debug, "Seeding IPv4 with dht.transmissionbt.com node.\n");
+		fflush(dht_debug);
+		memset(&Seed, 0, sizeof(Seed));
+		Seed.sin_family = AF_INET;         
+		Seed.sin_port = htons(6881); 
+		inet_pton(AF_INET, "87.98.162.88", &(Seed.sin_addr.s_addr));
+		dht_insert_node(seedid, (struct sockaddr*) &Seed, sizeof(Seed));
 		if (Bootstrap.numofIPv4s > 0)
 		{
-			// seed with saved IPv4 nodes
 			int ctr = 0;
 
-			fprintf(dht_debug, "Seeding IPv4 with %i saved nodes.\n", Bootstrap.numofIPv4s);
+			fprintf(dht_debug, "Pinging %i saved nodes.\n", Bootstrap.numofIPv4s);
 			fflush(dht_debug);
 			for (ctr = 0; ctr < Bootstrap.numofIPv4s;  ctr++)
 			{
-				dht_insert_node(seedid,(struct sockaddr*) &Bootstrap.IPv4bootnodes[ctr], 
+				dht_ping_node((struct sockaddr*) &Bootstrap.IPv4bootnodes[ctr], 
 				              sizeof(struct sockaddr_in));
 			}
 		}
-		else
-		{
-			fprintf(dht_debug, "Seeding IPv4 with dht.transmissionbt.com node.\n");
-			fflush(dht_debug);
-			memset(&Seed, 0, sizeof(Seed));
-			Seed.sin_family = AF_INET;         
-			Seed.sin_port = htons(6881); 
-			inet_pton(AF_INET, "87.98.162.88", &(Seed.sin_addr.s_addr));
-			dht_insert_node(seedid, (struct sockaddr*) &Seed, sizeof(Seed));
-		}
 	}
-
 	if(s6 >= 0)
 	{
+		fprintf(dht_debug, "Seeding IPv6 with dht.transmissionbt.com node.\n");
+		fflush(dht_debug);
+		memset(&Seed6, 0, sizeof(Seed6));
+		Seed6.sin6_family = AF_INET6;         
+		Seed6.sin6_port = htons(6881); 
+		inet_pton(AF_INET6, "2001:41d0:c:5ac:5::1", &(Seed6.sin6_addr));
+		dht_insert_node(seedid, (struct sockaddr*) &Seed6, sizeof(Seed6));
 		if (Bootstrap.numofIPv6s > 0)
 		{
-			// seed with saved IPv6 nodes
 			int ctr = 0;
 
-			fprintf(dht_debug, "Seeding IPv6 with %i saved nodes.\n", Bootstrap.numofIPv6s);
+			fprintf(dht_debug, "Pinging %i saved IPv6 nodes.\n", Bootstrap.numofIPv6s);
 			fflush(dht_debug);
 			for (ctr = 0; ctr < Bootstrap.numofIPv6s;  ctr++)
 			{
-				dht_insert_node(seedid, (struct sockaddr*) &Bootstrap.IPv6bootnodes[ctr], 
+				dht_ping_node((struct sockaddr*) &Bootstrap.IPv6bootnodes[ctr], 
 				              sizeof(struct sockaddr_in6));
 			}
-		}
-		else
-		{
-			fprintf(dht_debug, "Seeding IPv6 with dht.transmissionbt.com node.\n");
-			fflush(dht_debug);
-			memset(&Seed6, 0, sizeof(Seed6));
-			Seed6.sin6_family = AF_INET6;         
-			Seed6.sin6_port = htons(6881); 
-			inet_pton(AF_INET6, "2001:41d0:c:5ac:5::1", &(Seed6.sin6_addr));
-			dht_insert_node(seedid, (struct sockaddr*) &Seed6, sizeof(Seed6));
 		}
 	}
 	// start dht loop
