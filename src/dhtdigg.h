@@ -32,6 +32,7 @@
 #include <openssl/sha.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sqlite3.h> 
 
 #include "dht.h"
 #include "crypt3.h"

@@ -19,12 +19,13 @@ dnl  * with this program.  If not, see <http://www.gnu.org/licenses/>.          
 dnl  *                                                                          *
 dnl  ****************************************************************************/
 dnl 
-AC_INIT(dhtdigg, 0.20)
+AC_INIT(dhtdigg, 0.21)
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([1.11])
 AM_SILENT_RULES([yes])
 AC_PROG_CC
 LT_INIT
-PKG_CHECK_MODULES(DHTDIGG, openssl
+PKG_CHECK_MODULES(DHTDIGG, sqlite3
+openssl
 [gtk+-3.0 ])
 AC_OUTPUT([Makefile src/Makefile])

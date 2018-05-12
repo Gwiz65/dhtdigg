@@ -16,7 +16,6 @@
  * with this program.  If not, see <http://www.gnu.org/licenses/>.          *
  *                                                                          *
  ****************************************************************************/
-
 #include "dhtdigg.h" 
 
 /****************************
@@ -51,8 +50,8 @@ int peerlistopenslot = 0;
 int peerlistnum = 0;
 struct bootstrap_storage Bootstrap;
 gchar *workdir;
-gchar *torrentdir;
-
+//gchar *torrentdir;
+sqlite3 *torrent_db;
 
 /****************************************************************************
  *                                                                          *
@@ -66,10 +65,10 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 	FILE *torrent_file = NULL;
 	char torrentpath[PATH_MAX];
 
-	g_print("Parsing file: %s\n", torrentfilename);
-	g_print("****************************************************************************\n");
+	//g_print("Parsing file: %s\n", torrentfilename);
+	//g_print("****************************************************************************\n");
 	//open file
-	sprintf(torrentpath, "%s%s", torrentdir, torrentfilename);
+	sprintf(torrentpath, "%s%s", workdir, torrentfilename);
 	torrent_file = fopen(torrentpath, "r");
 	if (torrent_file)
 	{
@@ -101,15 +100,29 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 			if ((!strncmp(&torrent[0], "d4:infod", 8)) && (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
 			{
 
+				char hashstring[50];
+				char namestring[PATH_MAX];
+				char lastseen[PATH_MAX];
+				long length = 0;
+				long private = 0;
+				int bHasFiles = FALSE;
+				
 				// calculate hash
 				// info_data should be at torrent[7] to torrent[torrent_filesize - 1]
 				SHA1((unsigned char *)&torrent[7], torrent_filesize - 8, hash);
 				// display hash
-				g_print("   hash = ");
-				for (ctr=0; ctr < 20; ctr++) {
-					g_print("%02x", hash[ctr]);
+				//g_print("   hash = ");
+				hashstring[0] = 0;
+				for (ctr=0; ctr < 20; ctr++) 
+				{
+					char temp[50];
+
+					temp[0] = 0;
+					//g_print("%02x", hash[ctr]);
+					sprintf(temp, "%02x", hash[ctr]);
+					strcat(hashstring, temp);
 				}
-				g_print("\n");
+				//g_print("\n");
 
 				//parse info dictionary
 				ptr = 8; // jump over 'd4:infod'
@@ -127,11 +140,9 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 					ptr = ptr + infoentry_len; // jump to next item
 					if (!strcmp(infoentry, "length"))
 					{
-						long length;
-
 						ptr++;  //jump over 'i'
 						length = strtol(&torrent[ptr], NULL, 10);
-						g_print(" length = %li\n", length);
+						//g_print(" length = %li\n", length);
 						if (length < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++;  //jump over 'e'
@@ -148,7 +159,6 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 					}
 					else if (!strcmp(infoentry, "name"))
 					{
-						char namestring[PATH_MAX];
 						long strlen;
 
 						strlen = strtol(&torrent[ptr], NULL, 10);
@@ -156,16 +166,14 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++; // jump ':'
 						snprintf(namestring, strlen + 1, "%s", &torrent[ptr]);
-						g_print("   name = %s\n", namestring);
+						//g_print("   name = %s\n", namestring);
 						ptr = ptr + strlen;
 					}
 					else if (!strcmp(infoentry, "private"))
 					{
-						long private;
-
 						ptr++;  //jump over 'i'
 						private = strtol(&torrent[ptr], NULL, 10);
-						g_print("private = %li\n", private);
+						//g_print("private = %li\n", private);
 						if (private < 0) ptr++; // jump minus sign
 						while (isdigit(torrent[ptr]) != 0) ptr++;
 						ptr++;  //jump over 'e'
@@ -174,7 +182,8 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 					{
 						int filesloop = TRUE;
 
-						g_print("  Files List:\n");
+						bHasFiles = TRUE;
+						//g_print("  Files List:\n");
 						ptr++; // jump 'l'
 						// list of dictionaries
 						while (filesloop)
@@ -187,13 +196,52 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 							else if (torrent[ptr] == 'd')
 							{
 								int dictloop = TRUE;
+								
+								char pathstring[PATH_MAX];
+								long filelength = 0;
 
+								pathstring[0] = 0;
 								ptr++;  // jump 'd'
 								// file dictionary
 								while (dictloop)
 								{
 									if (torrent[ptr] == 'e') // end of dictionary
 									{
+										gchar *sqlcmd2 = "";
+										char *err_msg3 = 0;
+										char filelengthstr[256];
+										char safepathstring[PATH_MAX * 2];
+										int ctr2;
+										int safectr2 = 0;
+										
+										// convert ints to strings
+										sprintf(filelengthstr, "%li", filelength);
+										// double single quotes for pathstring
+										for (ctr2 = 0; ctr2 < strlen(pathstring); ctr2++)
+										{
+											if (pathstring[ctr2] == 39) 
+											{
+												safepathstring[safectr2] = 39;
+												safectr2++;
+											}
+											safepathstring[safectr2] = pathstring[ctr2];
+											safectr2++;
+										}
+										safepathstring[safectr2] = 0;
+										// write to database
+										sqlcmd2 = g_strconcat("REPLACE INTO files (hash,length,name)",
+										                      " VALUES ('",
+										                      hashstring,
+										                      "',",
+										                      filelengthstr,
+										                      ",'",
+										                      safepathstring,
+										                      "');", NULL);
+										if (!((sqlite3_exec(torrent_db, sqlcmd2, NULL, 0, &err_msg3)) == SQLITE_OK))
+										{
+											printf("SQL error: %s\n", err_msg3);
+											sqlite3_free(err_msg3);
+										}
 										dictloop = FALSE;
 										ptr++;
 									}
@@ -212,11 +260,10 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 										if (!strcmp(dictentry, "length"))
 										{
 
-											long filelength;
-
 											ptr++;  //jump over 'i'
 											filelength = strtol(&torrent[ptr], NULL, 10);
-											g_print("%12li", filelength);
+											length = length + filelength;
+											//g_print("%12li", filelength);
 											if (filelength < 0) ptr++; // jump minus sign
 											while (isdigit(torrent[ptr]) != 0) ptr++;
 											ptr++;  //jump over 'e'
@@ -225,9 +272,6 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 										{
 											// list of strings
 
-											char pathstring[PATH_MAX];
-
-											pathstring[0] = 0;
 											ptr++; // jump 'l'
 											int pathloop = TRUE;
 											while (pathloop)
@@ -253,7 +297,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 													if (!(torrent[ptr] == 'e')) strcat(pathstring, "/");
 												}
 											}
-											g_print("   %s\n", pathstring);
+											//g_print("   %s\n", pathstring);
 										}
 										else
 										{
@@ -306,7 +350,7 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 												else
 												{
 													g_print("Unparsable item!\n");
-													g_print("loc: %s\n", &torrent[ptr]);
+													//g_print("loc: %s\n", &torrent[ptr]);
 													ptr = torrent_filesize;
 													dictloop = FALSE;
 													filesloop = FALSE;
@@ -370,12 +414,79 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 							else
 							{
 								g_print("Unparsable item!\n");
-								g_print("loc: %s\n", &torrent[ptr]);
+								//g_print("loc: %s\n", &torrent[ptr]);
 								ptr = torrent_filesize;
 								level = 0;
 							}
 						}
 					}
+				}
+
+				{
+					gchar *sqlcmd = "";
+					char *err_msg2 = 0;
+					char lengthstr[256];
+					char privatestr[256];
+					char safenamestring[PATH_MAX * 2];
+					int ctr;
+					int safectr = 0;
+
+					// first 14 chars of filename = lastseen time
+					strncpy(lastseen, torrentfilename, 14);
+					lastseen[14] = 0;
+					// convert ints to strings
+					sprintf(lengthstr, "%li", length);
+					sprintf(privatestr, "%li", private);
+					// double single quotes for sql
+					for (ctr = 0; ctr < strlen(namestring); ctr++)
+					{
+						if (namestring[ctr] == 39) 
+						{
+							safenamestring[safectr] = 39;
+							safectr++;
+						}
+						safenamestring[safectr] = namestring[ctr];
+						safectr++;
+					}
+					safenamestring[safectr] = 0;
+					// write to database
+					sqlcmd = g_strconcat("REPLACE INTO hash (hash,name,lastseen,length,private)",
+					                     " VALUES ('",
+					                     hashstring,
+					                     "','",
+					                     safenamestring,
+					                     "','",
+					                     lastseen,
+					                     "',",
+					                     lengthstr,
+					                     ",",
+					                     privatestr,
+					                     ");", NULL);
+					if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
+					{
+						printf("SQL error: %s\n", err_msg2);
+						sqlite3_free(err_msg2);
+					}
+
+					if (bHasFiles == FALSE)
+					{
+						// write name to files table
+						sqlcmd = g_strconcat("REPLACE INTO files (hash,length,name)",
+						                      " VALUES ('",
+						                      hashstring,
+						                     "',",
+						                     lengthstr,
+						                     ",'",
+						                     safenamestring,
+						                     "');", NULL);
+						if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
+						{
+							printf("SQL error: %s\n", err_msg2);
+							sqlite3_free(err_msg2);
+						}
+					}
+					fprintf(bt_display, "Torrent file parsed into database.\n");
+					fflush(bt_display);
 				}
 			}
 			else
@@ -385,9 +496,9 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 		}
 		fclose(torrent_file);
 	}
-	g_print("****************************************************************************\n \n");
+	//g_print("****************************************************************************\n \n");
 	// remove the file
-	//remove(torrentpath);
+	remove(torrentpath);
 }
 
 /******************************************************************************
@@ -756,7 +867,7 @@ gint GetMetadataThread (void)
 											        tm.tm_min, 
 											        tm.tm_sec);
 											// set filename
-											sprintf(filename, "%s%s", torrentdir, filenamebase);
+											sprintf(filename, "%s%s", workdir, filenamebase);
 											// create file
 											torrentfile_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
 											                      S_IRWXU | S_IRWXG | S_IRWXO);
@@ -1334,6 +1445,8 @@ gint DhtThread(void)
  ****************************************************************************/
 void MainWindowDestroy (GtkWidget *widget, gpointer data)
 {
+	// close sqlite3
+	sqlite3_close(torrent_db);
 	// kill loops 
 	dhtloop = FALSE;
 	getmetadataloop = FALSE;
@@ -1392,6 +1505,7 @@ int main (int argc, char *argv[])
 	GtkWidget *window;
 	int flags;
 	gchar *bsfilename;
+	gchar *dbfilename;
 
 	// init gtk
 	gtk_init (&argc, &argv);
@@ -1421,10 +1535,6 @@ int main (int argc, char *argv[])
 	workdir = g_strconcat (g_get_home_dir (), "/.dhtdigg/", NULL);
 	// make sure work directory exists
 	if (stat(workdir, &st) == -1) mkdir(workdir, 0700);
-	// set torrent directory
-	torrentdir = g_strconcat (workdir, "torrents/", NULL);
-	// make sure torrent directory exists
-	if (stat(torrentdir, &st) == -1) mkdir(torrentdir, 0700);
 	// clear bootstrap storage
 	memset(&Bootstrap, 0, sizeof(Bootstrap));
 	//set bootstrap  file name
@@ -1434,13 +1544,69 @@ int main (int argc, char *argv[])
 		int bsfile_fd;
 
 		// open bootstrap file
-		bsfile_fd = open(bsfilename, O_RDONLY, S_IRWXU | S_IRWXG
-		                 | S_IRWXO);
+		bsfile_fd = open(bsfilename, O_RDONLY, S_IRWXU | S_IRWXG | S_IRWXO);
 		read(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
 		close(bsfile_fd);
 	}
-	fprintf(bt_display, "Setting torrent directory to %s\n", torrentdir);
-	fflush(bt_display);
+	//set database file name
+	dbfilename = g_strconcat (workdir, "dhtdigg.db", NULL);
+	//open database
+	if (stat(dbfilename, &st) == 0)
+	{
+		//exists
+		if (sqlite3_open(dbfilename, &torrent_db))
+		{
+			printf("Database open error: %s\n", sqlite3_errmsg(torrent_db));
+		}
+		else
+		{
+			fprintf(bt_display, "Opening existing database %s\n", dbfilename);
+			fflush(bt_display);
+		}
+	}
+	else
+	{
+		if (sqlite3_open(dbfilename, &torrent_db))
+		{
+			printf("Database open error: %s\n", sqlite3_errmsg(torrent_db));
+		}
+		else 
+		{
+			char *err_msg = 0;
+
+			fprintf(bt_display, "Creating new database %s\n", dbfilename);
+			fflush(bt_display);
+			// create tables
+			if (!((sqlite3_exec(torrent_db,
+			                    "CREATE TABLE dhtdigg ("  \
+			                    "dbversion TEXT);" \
+			                    "CREATE TABLE hash ("  \
+			                    "hash TEXT PRIMARY KEY UNIQUE NOT NULL, " \
+			                    "name TEXT, " \
+			                    "lastseen TIME, " \
+			                    "length INTEGER, " \
+			                    "private INTEGER);" \
+			                    "CREATE TABLE files ("  \
+			                    "hash TEXT, " \
+			                    "length INTEGER, " \
+			                    "name TEXT, " \
+			                    "UNIQUE (hash, length, name)" \
+			                    ");"
+			                    , NULL, 0, &err_msg)) == SQLITE_OK))
+			{
+				printf("SQL error: %s\n", err_msg);
+				sqlite3_free(err_msg);
+			}
+			// set database version
+			if (!((sqlite3_exec(torrent_db,
+			                    "REPLACE INTO dhtdigg (dbversion) VALUES ('1.0')",
+			                    NULL, 0, &err_msg)) == SQLITE_OK))
+			{
+				printf("SQL error: %s\n", err_msg);
+				sqlite3_free(err_msg);
+			}
+		}
+	}
 	fprintf(bt_display, "Waiting for DHT to populate. This could take 10 minutes or so....\n");
 	fflush(bt_display);
 	// start dht thread
@@ -1454,6 +1620,7 @@ int main (int argc, char *argv[])
 	// autosave bootstrap after 2 minutes
 	gdk_threads_add_timeout_seconds (120, (GSourceFunc) WriteBootstrapFile, NULL);
 	// start main loop
+	//testfunction();
 	gtk_main ();
 	return 0;
 }
