@@ -20,7 +20,8 @@
 ##  ****************************************************************************/
 ## 
 uidir = $(pkgdatadir)/ui
-ui_DATA = dhtdigg.ui
+dhtdigguidir =  
+dhtdiggui_DATA = dhtdigg.ui
 AM_CPPFLAGS = \
 	-DPACKAGE_LOCALE_DIR=\""$(localedir)"\" \
 	-DPACKAGE_SRC_DIR=\""$(srcdir)"\" \
