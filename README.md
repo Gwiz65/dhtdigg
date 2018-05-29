@@ -13,6 +13,6 @@ NOTE:     dhtdigg does not download or share any of the bittorrent pieces
           downloads the metadata and then disconnects.
 
 TODO:
- - next step is to setup a frontend for searching the database
+ - currently seach does nothing. 
  - eliminte unnecessary file creation and parse in memory to database
  - Currently not capturing IPv6 peers.

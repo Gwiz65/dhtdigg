@@ -19,7 +19,7 @@ dnl  * with this program.  If not, see <http://www.gnu.org/licenses/>.          
 dnl  *                                                                          *
 dnl  ****************************************************************************/
 dnl 
-AC_INIT(dhtdigg, 0.21)
+AC_INIT(dhtdigg, 0.22)
 AC_CONFIG_HEADERS([config.h])
 AM_INIT_AUTOMAKE([1.11])
 AM_SILENT_RULES([yes])

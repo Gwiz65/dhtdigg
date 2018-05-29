@@ -22,7 +22,7 @@
  *       Defines            *
  ****************************/
 // use the local (not installed) ui file
-//#define UI_FILE "src/dhtdigg.ui"
+// #define UI_FILE "src/dhtdigg.ui"
 
 // use the installed ui file
 #define UI_FILE PACKAGE_DATA_DIR"/ui/dhtdigg.ui"
@@ -40,6 +40,14 @@ GtkTextBuffer *DHTtextbuffer;
 GtkTextBuffer *BTtextbuffer;
 GtkScrolledWindow *DHTWindowScrollView;
 GtkScrolledWindow *BTWindowScrollView;
+GtkLabel *TorrentNameLabel;
+GtkLabel *HashLabel;
+GtkLabel *LastSeenLabel;
+GtkLabel *LengthLabel;
+GtkLabel *PrivateLabel;
+GtkLabel *RecordCount;
+GtkListStore *FileList;
+GtkTreeIter iter;
 gboolean dhtloop = TRUE;
 gboolean getmetadataloop = TRUE;
 static unsigned char buf[4096];
@@ -50,8 +58,317 @@ int peerlistopenslot = 0;
 int peerlistnum = 0;
 struct bootstrap_storage Bootstrap;
 gchar *workdir;
-//gchar *torrentdir;
 sqlite3 *torrent_db;
+int totalrecords = 0;
+int currentrowid = 0;
+int recordsbeyond = 0;
+int rowid_ret = 0;
+
+/****************************************************************************
+ *                                                                          *
+ * Function: getrowid_ret                                                *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+int getrowid_ret(void *data, int argc, char **argv, char **azColName)
+
+{
+	rowid_ret = (strtol(argv[0], NULL, 10));
+	return 0;
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: getrecordsbeyond                                                *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+int getrecordsbeyond(void *data, int argc, char **argv, char **azColName)
+{
+	recordsbeyond = (strtol(argv[0], NULL, 10));
+	return 0;
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: gettotalrecords                                                *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+int gettotalrecords(void *data, int argc, char **argv, char **azColName)
+{
+	totalrecords = (strtol(argv[0], NULL, 10));
+	return 0;
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: getfiles                                                       *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+int getfiles(void *data, int argc, char **argv, char **azColName)
+{
+	//append line to list store
+	gtk_list_store_append (FileList, &iter);
+	gtk_list_store_set (FileList, &iter, 0, 
+	                    g_format_size(strtol(argv[1], NULL, 10)), -1);
+	gtk_list_store_set (FileList, &iter, 1, argv[2], -1);
+	return 0;
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: getrecord                                                      *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+int getrecord(void *data, int argc, char **argv, char **azColName)
+{
+	char temp1[32];
+	char temp2[32];
+	int dstptr = 0;
+	int srcptr = 0;
+	char *err_msg = 0;
+	gchar *sqlcmd = "";
+
+	// DEBUG: prints record
+	//for(i = 0; i<argc; i++){
+	//	printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+	//}
+	//printf("\n");
+
+	// set currentrowid
+	currentrowid = strtol(argv[0], NULL, 10);
+	// set display
+	gtk_label_set_text (TorrentNameLabel, argv[2]); 
+	gtk_label_set_text (HashLabel, argv[1]);
+	// format last seen time
+	sprintf(temp1, "%s", argv[3]);
+	while (srcptr < strlen(temp1))
+	{
+		if ((srcptr == 4) || (srcptr == 6))
+		{
+			temp2[dstptr] = '-';
+			dstptr++;
+		}
+		if (srcptr == 8)
+		{
+			temp2[dstptr] = ' ';
+			dstptr++;
+			temp2[dstptr] = ' ';
+			dstptr++;
+		}
+		if ((srcptr == 10) || (srcptr == 12))
+		{
+			temp2[dstptr] = ':';
+			dstptr++;
+		}
+		temp2[dstptr] = temp1[srcptr];
+		srcptr++;
+		dstptr++;
+	}
+	temp2[dstptr] = 0;
+	gtk_label_set_text (LastSeenLabel, temp2);
+	gtk_label_set_text (LengthLabel, g_format_size (strtol(argv[4], NULL, 10)));
+	if (strtol(argv[5], NULL, 10) == 1)
+		gtk_label_set_text (PrivateLabel, "Yes");
+	else
+		gtk_label_set_text (PrivateLabel, "No");
+	// clear list store
+	gtk_list_store_clear (FileList);
+	// query file records
+	sqlcmd = g_strconcat("SELECT * FROM files WHERE hash = '", argv[1],
+	                     "';", NULL);
+	if (!((sqlite3_exec(torrent_db, sqlcmd, getfiles, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	return 0;
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: display_record                                                 *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+void display_record(void)
+{
+	char *err_msg = 0;
+
+	// get number of rows
+	totalrecords = 0;
+	if (!((sqlite3_exec(torrent_db, 
+	                    "SELECT count(rowid) FROM hash;",
+	                    gettotalrecords, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	if (totalrecords == 0)
+	{
+		gtk_label_set_text (TorrentNameLabel, ""); 
+		gtk_label_set_text (HashLabel, "");
+		gtk_label_set_text (LastSeenLabel, "");
+		gtk_label_set_text (LengthLabel, "");
+		gtk_label_set_text (PrivateLabel, "");
+		gtk_label_set_text (RecordCount, "0 of 0");
+		// clear list store
+		gtk_list_store_clear (FileList);
+		currentrowid = 0;
+	}
+	else
+	{
+		if (currentrowid == 0)
+		{
+			// show first record
+			if (!((sqlite3_exec(torrent_db, 
+			                    "SELECT rowid, * FROM hash ORDER BY ROWID ASC LIMIT 1;",
+			                    getrecord, 0, &err_msg)) == SQLITE_OK))
+			{
+				printf("SQL error: %s\n", err_msg);
+				sqlite3_free(err_msg);
+			}
+		}
+		else
+		{
+			char sqlcmd[1024];
+
+			// show currentrowid record
+			sprintf(sqlcmd, "SELECT rowid, * FROM hash WHERE rowid=%i;",
+			        currentrowid);
+			if (!((sqlite3_exec(torrent_db, sqlcmd, getrecord, 0, &err_msg)) == SQLITE_OK))
+			{
+				printf("SQL error: %s\n", err_msg);
+				sqlite3_free(err_msg);
+			}
+		}
+		// determine place and display
+		{
+			char sqlcmd[1024];
+			char temp[100];
+			
+			recordsbeyond = 0;
+			sprintf(sqlcmd, "SELECT count(rowid) FROM hash WHERE rowid > %i;",
+			        currentrowid);
+			if (!((sqlite3_exec(torrent_db, sqlcmd, getrecordsbeyond, 0, &err_msg)) == SQLITE_OK))
+			{
+				printf("SQL error: %s\n", err_msg);
+				sqlite3_free(err_msg);
+			}
+			sprintf(temp, "%i of %i", totalrecords - recordsbeyond, totalrecords);
+			gtk_label_set_text (RecordCount, temp);
+		}
+	}
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: first_button_clicked                                           *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+void first_button_clicked (GtkButton *button, gpointer user_data)
+{
+	char *err_msg = 0;
+	
+	// set current rowid to first
+	if (!((sqlite3_exec(torrent_db, 
+	                    "SELECT rowid FROM hash ORDER BY rowid ASC LIMIT 1;",
+	                    getrowid_ret, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	currentrowid = rowid_ret;
+	display_record();
+}
+
+/****************************************************************************
+ *                                                                          *
+ * Function: last_button_clicked                                           *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+void last_button_clicked (GtkButton *button, gpointer user_data)
+{
+	char *err_msg = 0;
+	
+	// set current rowid to last
+	if (!((sqlite3_exec(torrent_db, 
+	                    "SELECT rowid FROM hash ORDER BY rowid DESC LIMIT 1;",
+	                    getrowid_ret, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	currentrowid = rowid_ret;
+	display_record();
+}
+
+
+
+/****************************************************************************
+ *                                                                          *
+ * Function: back_button_clicked                                           *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+void back_button_clicked (GtkButton *button, gpointer user_data)
+{
+	char *err_msg = 0;
+
+
+	char sqlcmd[1024];
+
+	sprintf(sqlcmd, "SELECT rowid FROM hash WHERE rowid < %i ORDER BY rowid DESC LIMIT 1;",
+	        currentrowid);
+	if (!((sqlite3_exec(torrent_db, sqlcmd, getrowid_ret, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	currentrowid = rowid_ret;
+	display_record();
+}
+
+
+
+/****************************************************************************
+ *                                                                          *
+ * Function: foward_button_clicked                                           *
+ *                                                                          *
+ * Purpose :                                                                *
+ *                                                                          *
+ ****************************************************************************/
+void foward_button_clicked (GtkButton *button, gpointer user_data)
+{
+	char *err_msg = 0;
+
+
+	char sqlcmd[1024];
+
+	sprintf(sqlcmd, "SELECT rowid FROM hash WHERE rowid > %i ORDER BY rowid ASC LIMIT 1;",
+	        currentrowid);
+	if (!((sqlite3_exec(torrent_db, sqlcmd, getrowid_ret, 0, &err_msg)) == SQLITE_OK))
+	{
+		printf("SQL error: %s\n", err_msg);
+		sqlite3_free(err_msg);
+	}
+	currentrowid = rowid_ret;
+	display_record();
+}
 
 /****************************************************************************
  *                                                                          *
@@ -97,7 +414,8 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 			// testing - shows file contents
 			//g_print("\n \n********************\n%s\n********************\n", torrent);
 
-			if ((!strncmp(&torrent[0], "d4:infod", 8)) && (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
+			if ((!strncmp(&torrent[0], "d4:infod", 8)) && 
+			    (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
 			{
 
 				char hashstring[50];
@@ -487,6 +805,8 @@ void ParseTorrentFiles(char torrentfilename[PATH_MAX])
 					}
 					fprintf(bt_display, "Torrent file parsed into database.\n");
 					fflush(bt_display);
+					sleep(1);
+					display_record();
 				}
 			}
 			else
@@ -1482,6 +1802,21 @@ static GtkWidget* CreateMainWindow (void)
 		                                           (builder, "scrolledwindow1"));
 		BTWindowScrollView = GTK_SCROLLED_WINDOW (gtk_builder_get_object 
 		                                          (builder, "scrolledwindow2"));
+		TorrentNameLabel = GTK_LABEL (gtk_builder_get_object (builder, "torrent_name"));
+
+		HashLabel = GTK_LABEL (gtk_builder_get_object (builder, "hash_label"));
+		LastSeenLabel = GTK_LABEL (gtk_builder_get_object (builder, "last_seen"));
+		LengthLabel = GTK_LABEL (gtk_builder_get_object (builder, "length"));
+
+		PrivateLabel = GTK_LABEL (gtk_builder_get_object (builder, "private_label"));
+
+
+		FileList = GTK_LIST_STORE (gtk_builder_get_object (builder, "liststore1"));
+
+		// RecordCount
+		RecordCount = GTK_LABEL (gtk_builder_get_object (builder, "record_count"));
+
+
 		// unload builder
 		g_object_unref (builder);
 	}
@@ -1621,6 +1956,7 @@ int main (int argc, char *argv[])
 	gdk_threads_add_timeout_seconds (120, (GSourceFunc) WriteBootstrapFile, NULL);
 	// start main loop
 	//testfunction();
+	display_record();
 	gtk_main ();
 	return 0;
 }
