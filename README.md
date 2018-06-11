@@ -13,6 +13,5 @@ NOTE:     dhtdigg does not download or share any of the bittorrent pieces
           downloads the metadata and then disconnects.
 
 TODO:
- - currently seach does nothing. 
- - eliminte unnecessary file creation and parse in memory to database
+ - Currently seach does nothing. 
  - Currently not capturing IPv6 peers.

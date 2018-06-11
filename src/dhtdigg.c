@@ -29,6 +29,7 @@
 
 #define MAX_PEERPROSPECTS 64
 #define MSGBUFFERSIZE 65536
+#define METADATBUFFERSIZE 6291456
 
 /****************************
  *       Globals            *
@@ -63,6 +64,7 @@ int totalrecords = 0;
 int currentrowid = 0;
 int recordsbeyond = 0;
 int rowid_ret = 0;
+char metadatabuffer[METADATBUFFERSIZE]; // 6 MB buffer
 
 /****************************************************************************
  *                                                                          *
@@ -72,7 +74,6 @@ int rowid_ret = 0;
  *                                                                          *
  ****************************************************************************/
 int getrowid_ret(void *data, int argc, char **argv, char **azColName)
-
 {
 	rowid_ret = (strtol(argv[0], NULL, 10));
 	return 0;
@@ -136,12 +137,6 @@ int getrecord(void *data, int argc, char **argv, char **azColName)
 	int srcptr = 0;
 	char *err_msg = 0;
 	gchar *sqlcmd = "";
-
-	// DEBUG: prints record
-	//for(i = 0; i<argc; i++){
-	//	printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-	//}
-	//printf("\n");
 
 	// set currentrowid
 	currentrowid = strtol(argv[0], NULL, 10);
@@ -255,7 +250,8 @@ void display_record(void)
 		{
 			char sqlcmd[1024];
 			char temp[100];
-			
+			int recordnum = 0;
+
 			recordsbeyond = 0;
 			sprintf(sqlcmd, "SELECT count(rowid) FROM hash WHERE rowid > %i;",
 			        currentrowid);
@@ -264,7 +260,9 @@ void display_record(void)
 				printf("SQL error: %s\n", err_msg);
 				sqlite3_free(err_msg);
 			}
-			sprintf(temp, "%i of %i", totalrecords - recordsbeyond, totalrecords);
+			recordnum = totalrecords - recordsbeyond;
+			if (recordnum < 1) recordnum = 1;
+			sprintf(temp, "%i of %i", recordnum, totalrecords);
 			gtk_label_set_text (RecordCount, temp);
 		}
 	}
@@ -280,7 +278,7 @@ void display_record(void)
 void first_button_clicked (GtkButton *button, gpointer user_data)
 {
 	char *err_msg = 0;
-	
+
 	// set current rowid to first
 	if (!((sqlite3_exec(torrent_db, 
 	                    "SELECT rowid FROM hash ORDER BY rowid ASC LIMIT 1;",
@@ -303,7 +301,7 @@ void first_button_clicked (GtkButton *button, gpointer user_data)
 void last_button_clicked (GtkButton *button, gpointer user_data)
 {
 	char *err_msg = 0;
-	
+
 	// set current rowid to last
 	if (!((sqlite3_exec(torrent_db, 
 	                    "SELECT rowid FROM hash ORDER BY rowid DESC LIMIT 1;",
@@ -316,8 +314,6 @@ void last_button_clicked (GtkButton *button, gpointer user_data)
 	display_record();
 }
 
-
-
 /****************************************************************************
  *                                                                          *
  * Function: back_button_clicked                                           *
@@ -328,8 +324,6 @@ void last_button_clicked (GtkButton *button, gpointer user_data)
 void back_button_clicked (GtkButton *button, gpointer user_data)
 {
 	char *err_msg = 0;
-
-
 	char sqlcmd[1024];
 
 	sprintf(sqlcmd, "SELECT rowid FROM hash WHERE rowid < %i ORDER BY rowid DESC LIMIT 1;",
@@ -343,8 +337,6 @@ void back_button_clicked (GtkButton *button, gpointer user_data)
 	display_record();
 }
 
-
-
 /****************************************************************************
  *                                                                          *
  * Function: foward_button_clicked                                           *
@@ -355,8 +347,6 @@ void back_button_clicked (GtkButton *button, gpointer user_data)
 void foward_button_clicked (GtkButton *button, gpointer user_data)
 {
 	char *err_msg = 0;
-
-
 	char sqlcmd[1024];
 
 	sprintf(sqlcmd, "SELECT rowid FROM hash WHERE rowid > %i ORDER BY rowid ASC LIMIT 1;",
@@ -368,457 +358,6 @@ void foward_button_clicked (GtkButton *button, gpointer user_data)
 	}
 	currentrowid = rowid_ret;
 	display_record();
-}
-
-/****************************************************************************
- *                                                                          *
- * Function: ParseTorrentFiles                                              *
- *                                                                          *
- * Purpose :                                                                *
- *                                                                          *
- ****************************************************************************/
-void ParseTorrentFiles(char torrentfilename[PATH_MAX])
-{
-	FILE *torrent_file = NULL;
-	char torrentpath[PATH_MAX];
-
-	//g_print("Parsing file: %s\n", torrentfilename);
-	//g_print("****************************************************************************\n");
-	//open file
-	sprintf(torrentpath, "%s%s", workdir, torrentfilename);
-	torrent_file = fopen(torrentpath, "r");
-	if (torrent_file)
-	{
-		unsigned char hash[20];
-		int ctr;
-		int ptr = 0;
-		char torrent[1048576]; // 1 MB buffer
-		long torrent_filesize;
-
-		// get file size
-		fseek(torrent_file, 0, SEEK_END);
-		torrent_filesize = ftell(torrent_file);
-		fseek(torrent_file, 0, SEEK_SET);
-
-		if (torrent_filesize < 32)
-		{
-			g_print("Invalid torrent file! Aborting.\n");
-		}
-		else
-		{
-			// read file into memory
-			fread(torrent, torrent_filesize, 1, torrent_file);
-			// add terminator
-			torrent[torrent_filesize] = 0;
-
-			// testing - shows file contents
-			//g_print("\n \n********************\n%s\n********************\n", torrent);
-
-			if ((!strncmp(&torrent[0], "d4:infod", 8)) && 
-			    (!strncmp(&torrent[torrent_filesize - 2], "ee", 2)))
-			{
-
-				char hashstring[50];
-				char namestring[PATH_MAX];
-				char lastseen[PATH_MAX];
-				long length = 0;
-				long private = 0;
-				int bHasFiles = FALSE;
-				
-				// calculate hash
-				// info_data should be at torrent[7] to torrent[torrent_filesize - 1]
-				SHA1((unsigned char *)&torrent[7], torrent_filesize - 8, hash);
-				// display hash
-				//g_print("   hash = ");
-				hashstring[0] = 0;
-				for (ctr=0; ctr < 20; ctr++) 
-				{
-					char temp[50];
-
-					temp[0] = 0;
-					//g_print("%02x", hash[ctr]);
-					sprintf(temp, "%02x", hash[ctr]);
-					strcat(hashstring, temp);
-				}
-				//g_print("\n");
-
-				//parse info dictionary
-				ptr = 8; // jump over 'd4:infod'
-				while (ptr < torrent_filesize-2)  
-				{
-					char infoentry[1024];
-					long infoentry_len;
-
-					// get a string
-					infoentry_len = strtol(&torrent[ptr], NULL, 10);
-					if (infoentry_len < 0) ptr++; // jump minus sign
-					while (isdigit(torrent[ptr]) != 0) ptr++;
-					ptr++; // jump ':'
-					snprintf(infoentry, infoentry_len + 1, "%s", &torrent[ptr]);
-					ptr = ptr + infoentry_len; // jump to next item
-					if (!strcmp(infoentry, "length"))
-					{
-						ptr++;  //jump over 'i'
-						length = strtol(&torrent[ptr], NULL, 10);
-						//g_print(" length = %li\n", length);
-						if (length < 0) ptr++; // jump minus sign
-						while (isdigit(torrent[ptr]) != 0) ptr++;
-						ptr++;  //jump over 'e'
-					}
-					else if (!strcmp(infoentry, "pieces"))
-					{
-						long sizeofpieces;
-
-						// jump over pieces
-						sizeofpieces = strtol(&torrent[ptr], NULL, 10);
-						if (sizeofpieces < 0) ptr++; // jump minus sign
-						while (isdigit(torrent[ptr]) != 0) ptr++;
-						ptr = ptr + sizeofpieces + 1;
-					}
-					else if (!strcmp(infoentry, "name"))
-					{
-						long strlen;
-
-						strlen = strtol(&torrent[ptr], NULL, 10);
-						if (strlen < 0) ptr++; // jump minus sign
-						while (isdigit(torrent[ptr]) != 0) ptr++;
-						ptr++; // jump ':'
-						snprintf(namestring, strlen + 1, "%s", &torrent[ptr]);
-						//g_print("   name = %s\n", namestring);
-						ptr = ptr + strlen;
-					}
-					else if (!strcmp(infoentry, "private"))
-					{
-						ptr++;  //jump over 'i'
-						private = strtol(&torrent[ptr], NULL, 10);
-						//g_print("private = %li\n", private);
-						if (private < 0) ptr++; // jump minus sign
-						while (isdigit(torrent[ptr]) != 0) ptr++;
-						ptr++;  //jump over 'e'
-					}
-					else if (!strcmp(infoentry, "files"))
-					{
-						int filesloop = TRUE;
-
-						bHasFiles = TRUE;
-						//g_print("  Files List:\n");
-						ptr++; // jump 'l'
-						// list of dictionaries
-						while (filesloop)
-						{
-							if (torrent[ptr] == 'e') // end of list
-							{
-								filesloop = FALSE;
-								ptr++;
-							}
-							else if (torrent[ptr] == 'd')
-							{
-								int dictloop = TRUE;
-								
-								char pathstring[PATH_MAX];
-								long filelength = 0;
-
-								pathstring[0] = 0;
-								ptr++;  // jump 'd'
-								// file dictionary
-								while (dictloop)
-								{
-									if (torrent[ptr] == 'e') // end of dictionary
-									{
-										gchar *sqlcmd2 = "";
-										char *err_msg3 = 0;
-										char filelengthstr[256];
-										char safepathstring[PATH_MAX * 2];
-										int ctr2;
-										int safectr2 = 0;
-										
-										// convert ints to strings
-										sprintf(filelengthstr, "%li", filelength);
-										// double single quotes for pathstring
-										for (ctr2 = 0; ctr2 < strlen(pathstring); ctr2++)
-										{
-											if (pathstring[ctr2] == 39) 
-											{
-												safepathstring[safectr2] = 39;
-												safectr2++;
-											}
-											safepathstring[safectr2] = pathstring[ctr2];
-											safectr2++;
-										}
-										safepathstring[safectr2] = 0;
-										// write to database
-										sqlcmd2 = g_strconcat("REPLACE INTO files (hash,length,name)",
-										                      " VALUES ('",
-										                      hashstring,
-										                      "',",
-										                      filelengthstr,
-										                      ",'",
-										                      safepathstring,
-										                      "');", NULL);
-										if (!((sqlite3_exec(torrent_db, sqlcmd2, NULL, 0, &err_msg3)) == SQLITE_OK))
-										{
-											printf("SQL error: %s\n", err_msg3);
-											sqlite3_free(err_msg3);
-										}
-										dictloop = FALSE;
-										ptr++;
-									}
-									else 
-									{
-										char dictentry[1024];
-										long dictentry_len;
-
-										// get a string
-										dictentry_len = strtol(&torrent[ptr], NULL, 10);
-										if (dictentry_len < 0) ptr++; // jump minus sign
-										while (isdigit(torrent[ptr]) != 0) ptr++;
-										ptr++; // jump ':'
-										snprintf(dictentry, dictentry_len + 1, "%s", &torrent[ptr]);
-										ptr = ptr + dictentry_len; // jump to next item
-										if (!strcmp(dictentry, "length"))
-										{
-
-											ptr++;  //jump over 'i'
-											filelength = strtol(&torrent[ptr], NULL, 10);
-											length = length + filelength;
-											//g_print("%12li", filelength);
-											if (filelength < 0) ptr++; // jump minus sign
-											while (isdigit(torrent[ptr]) != 0) ptr++;
-											ptr++;  //jump over 'e'
-										}
-										else if (!strcmp(dictentry, "path"))
-										{
-											// list of strings
-
-											ptr++; // jump 'l'
-											int pathloop = TRUE;
-											while (pathloop)
-											{
-												if (torrent[ptr] == 'e') // end of path list
-												{
-													pathloop = FALSE;
-													ptr++;
-												}
-												else 
-												{
-													char tmpstring[PATH_MAX];
-													long tmpstrlen;
-
-													// get string
-													tmpstrlen = strtol(&torrent[ptr], NULL, 10);
-													if (tmpstrlen < 0) ptr++; // jump minus sign
-													while (isdigit(torrent[ptr]) != 0) ptr++;
-													ptr++; // jump ':'
-													snprintf(tmpstring, tmpstrlen + 1, "%s", &torrent[ptr]);
-													strcat(pathstring, tmpstring);
-													ptr = ptr + tmpstrlen;
-													if (!(torrent[ptr] == 'e')) strcat(pathstring, "/");
-												}
-											}
-											//g_print("   %s\n", pathstring);
-										}
-										else
-										{
-											int level = 512;
-
-											//debug
-											//g_print("Unrecognized files dictionary entry: %s\n", dictentry);
-
-											// jump one item
-											while (level > 0)
-											{
-												int tmpptr;
-
-												tmpptr = ptr;
-												if (level == 512) level = 0;
-												if (torrent[tmpptr] == 'd')
-												{
-													level++;
-													ptr++;
-												}
-												else if (torrent[tmpptr] == 'l')
-												{
-													level++;
-													ptr++;
-												}
-												else if (torrent[tmpptr] == 'e')
-												{
-													level--;
-													ptr++;
-												}
-												else if (torrent[tmpptr] == 'i')
-												{
-													long somenum;
-
-													ptr++;  //jump over 'i'
-													somenum = strtol(&torrent[ptr], NULL, 10);
-													if (somenum < 0) ptr++; // jump minus sign
-													while (isdigit(torrent[ptr]) != 0) ptr++;
-													ptr++;  //jump over 'e'
-												}
-												else if (isdigit(torrent[tmpptr]) != 0)
-												{
-													long str_len;
-
-													str_len = strtol(&torrent[ptr], NULL, 10);
-													if (str_len < 0) ptr++; // jump minus sign
-													while (isdigit(torrent[ptr]) != 0) ptr++;
-													ptr = ptr + str_len + 1;
-												}
-												else
-												{
-													g_print("Unparsable item!\n");
-													//g_print("loc: %s\n", &torrent[ptr]);
-													ptr = torrent_filesize;
-													dictloop = FALSE;
-													filesloop = FALSE;
-													level = 0;
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-					else
-					{
-						int level = 512;
-
-						//debug
-						//g_print("Unrecognized info dictionary entry: %s\n", infoentry);
-
-						// jump one item
-						while (level > 0)
-						{
-							int tmpptr;
-
-							tmpptr = ptr;
-							if (level == 512) level = 0;
-							if (torrent[tmpptr] == 'd')
-							{
-								level++;
-								ptr++;
-							}
-							else if (torrent[tmpptr] == 'l')
-							{
-								level++;
-								ptr++;
-							}
-							else if (torrent[tmpptr] == 'e')
-							{
-								level--;
-								ptr++;
-							}
-							else if (torrent[tmpptr] == 'i')
-							{
-								long somenum;
-								
-								ptr++;  //jump over 'i'
-								somenum = strtol(&torrent[ptr], NULL, 10);
-								if (somenum < 0) ptr++; // jump minus sign
-								while (isdigit(torrent[ptr]) != 0) ptr++;
-								ptr++;  //jump over 'e'
-							}
-							else if (isdigit(torrent[tmpptr]) != 0)
-							{
-								long str_len;
-
-								str_len = strtol(&torrent[ptr], NULL, 10);
-								if (str_len < 0) ptr++; // jump minus sign
-								while (isdigit(torrent[ptr]) != 0) ptr++;
-								ptr = ptr + str_len + 1;
-							}
-							else
-							{
-								g_print("Unparsable item!\n");
-								//g_print("loc: %s\n", &torrent[ptr]);
-								ptr = torrent_filesize;
-								level = 0;
-							}
-						}
-					}
-				}
-
-				{
-					gchar *sqlcmd = "";
-					char *err_msg2 = 0;
-					char lengthstr[256];
-					char privatestr[256];
-					char safenamestring[PATH_MAX * 2];
-					int ctr;
-					int safectr = 0;
-
-					// first 14 chars of filename = lastseen time
-					strncpy(lastseen, torrentfilename, 14);
-					lastseen[14] = 0;
-					// convert ints to strings
-					sprintf(lengthstr, "%li", length);
-					sprintf(privatestr, "%li", private);
-					// double single quotes for sql
-					for (ctr = 0; ctr < strlen(namestring); ctr++)
-					{
-						if (namestring[ctr] == 39) 
-						{
-							safenamestring[safectr] = 39;
-							safectr++;
-						}
-						safenamestring[safectr] = namestring[ctr];
-						safectr++;
-					}
-					safenamestring[safectr] = 0;
-					// write to database
-					sqlcmd = g_strconcat("REPLACE INTO hash (hash,name,lastseen,length,private)",
-					                     " VALUES ('",
-					                     hashstring,
-					                     "','",
-					                     safenamestring,
-					                     "','",
-					                     lastseen,
-					                     "',",
-					                     lengthstr,
-					                     ",",
-					                     privatestr,
-					                     ");", NULL);
-					if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
-					{
-						printf("SQL error: %s\n", err_msg2);
-						sqlite3_free(err_msg2);
-					}
-
-					if (bHasFiles == FALSE)
-					{
-						// write name to files table
-						sqlcmd = g_strconcat("REPLACE INTO files (hash,length,name)",
-						                      " VALUES ('",
-						                      hashstring,
-						                     "',",
-						                     lengthstr,
-						                     ",'",
-						                     safenamestring,
-						                     "');", NULL);
-						if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
-						{
-							printf("SQL error: %s\n", err_msg2);
-							sqlite3_free(err_msg2);
-						}
-					}
-					fprintf(bt_display, "Torrent file parsed into database.\n");
-					fflush(bt_display);
-					sleep(1);
-					display_record();
-				}
-			}
-			else
-			{
-				g_print("Invalid torrent file! Aborting.\n");
-			}
-		}
-		fclose(torrent_file);
-	}
-	//g_print("****************************************************************************\n \n");
-	// remove the file
-	remove(torrentpath);
 }
 
 /******************************************************************************
@@ -863,7 +402,7 @@ gboolean WriteBootstrapFile(void)
 	sprintf(bsfile, "%sdhtdigg.bs", workdir);
 	// create & write bootstrap file
 	bsfile_fd = open(bsfile, O_WRONLY | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG
-                 | S_IRWXO);
+	                 | S_IRWXO);
 	write(bsfile_fd, &Bootstrap, sizeof(struct bootstrap_storage));
 	fsync(bsfile_fd);
 	close(bsfile_fd);
@@ -1159,9 +698,6 @@ gint GetMetadataThread (void)
 											int numofpieces = 0;
 											int lastpiecesize = 0;
 											int counter = 0;
-											char filename[PATH_MAX];
-											char filenamebase[PATH_MAX];
-											int  torrentfile_fd;
 											time_t currenttime;
 											struct tm tm;
 
@@ -1175,23 +711,8 @@ gint GetMetadataThread (void)
 											fflush(bt_display);
 											fprintf(bt_display, "Last piece size = %d\n", lastpiecesize);
 											fflush(bt_display);
-											// open torrentfile;
-											currenttime = time(NULL);
-											tm = *localtime(&currenttime);
-											// use current time as filename base
-											sprintf(filenamebase, "%04d%02d%02d%02d%02d%02d.torrent", 
-											        tm.tm_year + 1900, 
-											        tm.tm_mon + 1, 
-											        tm.tm_mday, 
-											        tm.tm_hour, 
-											        tm.tm_min, 
-											        tm.tm_sec);
-											// set filename
-											sprintf(filename, "%s%s", workdir, filenamebase);
-											// create file
-											torrentfile_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC,
-											                      S_IRWXU | S_IRWXG | S_IRWXO);
-											write(torrentfile_fd, "d4:info", 7);
+											// clear metadatabuffer
+											memset(&metadatabuffer[0], 0x0, METADATBUFFERSIZE); 
 											// get pieces
 											while (counter < numofpieces)
 											{
@@ -1224,17 +745,13 @@ gint GetMetadataThread (void)
 														fprintf(bt_display, "Received %i bytes for get metadata piece.\n", got2);
 														fflush(bt_display);
 														// store piece
-
-														// if last piece write lastpiecesize
-														// 16384 otherwise
 														if (counter == numofpieces - 1)
 														{
-															write(torrentfile_fd, &msgbuffer[got2-lastpiecesize], 
-															      lastpiecesize);
+															memcpy(&metadatabuffer[counter * 16384], &msgbuffer[got2-lastpiecesize], lastpiecesize);
 														}
 														else
 														{
-															write(torrentfile_fd, &msgbuffer[got2-16384], 16384);
+															memcpy(&metadatabuffer[counter * 16384], &msgbuffer[got2-16384], 16384);
 														}
 													}
 													else
@@ -1275,21 +792,406 @@ gint GetMetadataThread (void)
 												}
 												counter++;
 											}
-											write(torrentfile_fd, "e", 1);
-											fsync(torrentfile_fd);
-											close(torrentfile_fd);
 											if (counter == numofpieces + 1)
 											{
-												remove(filename);
+												fprintf(bt_display, "Unable to capture all pieces.\n");
+												fflush(bt_display);
 											}
 											else
 											{
-												
+												unsigned char hash[20];
+												int ctr;
+												int ptr = 0;
+
 												fprintf(bt_display, "Metadata captured!!    Disconnecting peer.\n");
 												fflush(bt_display);
-												fprintf(bt_display, "Metadata saved to %s\n", filenamebase);
-												fflush(bt_display);
-												ParseTorrentFiles(filenamebase);
+												// parse metadata
+												if ((!strncmp(&metadatabuffer[0], "d", 1)) && 
+												    (!strncmp(&metadatabuffer[metasize - 1], "e", 1)))
+												{
+
+													char hashstring[50];
+													char namestring[PATH_MAX];
+													char lastseen[PATH_MAX];
+													long length = 0;
+													long private = 0;
+													int bHasFiles = FALSE;
+
+													// calculate hash
+													SHA1((unsigned char *)&metadatabuffer[0], metasize, hash);
+													hashstring[0] = 0;
+													for (ctr=0; ctr < 20; ctr++) 
+													{
+														char temp[50];
+
+														temp[0] = 0;
+														sprintf(temp, "%02x", hash[ctr]);
+														strcat(hashstring, temp);
+													}
+													//parse info dictionary
+													ptr = 1; // jump over 'd'
+													while (ptr < metasize-1)  
+													{
+														char infoentry[1024];
+														long infoentry_len;
+
+														// get a string
+														infoentry_len = strtol(&metadatabuffer[ptr], NULL, 10);
+														if (infoentry_len < 0) ptr++; // jump minus sign
+														while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+														ptr++; // jump ':'
+														snprintf(infoentry, infoentry_len + 1, "%s", &metadatabuffer[ptr]);
+														ptr = ptr + infoentry_len; // jump to next item
+														if (!strcmp(infoentry, "length"))
+														{
+															ptr++;  //jump over 'i'
+															length = strtol(&metadatabuffer[ptr], NULL, 10);
+															//g_print(" length = %li\n", length);
+															if (length < 0) ptr++; // jump minus sign
+															while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+															ptr++;  //jump over 'e'
+														}
+														else if (!strcmp(infoentry, "pieces"))
+														{
+															long sizeofpieces;
+
+															// jump over pieces
+															sizeofpieces = strtol(&metadatabuffer[ptr], NULL, 10);
+															if (sizeofpieces < 0) ptr++; // jump minus sign
+															while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+															ptr = ptr + sizeofpieces + 1;
+														}
+														else if (!strcmp(infoentry, "name"))
+														{
+															long strlen;
+
+															strlen = strtol(&metadatabuffer[ptr], NULL, 10);
+															if (strlen < 0) ptr++; // jump minus sign
+															while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+															ptr++; // jump ':'
+															snprintf(namestring, strlen + 1, "%s", &metadatabuffer[ptr]);
+															//g_print("   name = %s\n", namestring);
+															ptr = ptr + strlen;
+														}
+														else if (!strcmp(infoentry, "private"))
+														{
+															ptr++;  //jump over 'i'
+															private = strtol(&metadatabuffer[ptr], NULL, 10);
+															//g_print("private = %li\n", private);
+															if (private < 0) ptr++; // jump minus sign
+															while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+															ptr++;  //jump over 'e'
+														}
+														else if (!strcmp(infoentry, "files"))
+														{
+															int filesloop = TRUE;
+
+															bHasFiles = TRUE;
+															//g_print("  Files List:\n");
+															ptr++; // jump 'l'
+															// list of dictionaries
+															while (filesloop)
+															{
+																if (metadatabuffer[ptr] == 'e') // end of list
+																{
+																	filesloop = FALSE;
+																	ptr++;
+																}
+																else if (metadatabuffer[ptr] == 'd')
+																{
+																	int dictloop = TRUE;
+																	char pathstring[PATH_MAX];
+																	long filelength = 0;
+
+																	pathstring[0] = 0;
+																	ptr++;  // jump 'd'
+																	// file dictionary
+																	while (dictloop)
+																	{
+																		if (metadatabuffer[ptr] == 'e') // end of dictionary
+																		{
+																			gchar *sqlcmd2 = "";
+																			char *err_msg3 = 0;
+																			char filelengthstr[256];
+																			char safepathstring[PATH_MAX * 2];
+																			int ctr2;
+																			int safectr2 = 0;
+
+																			// convert ints to strings
+																			sprintf(filelengthstr, "%li", filelength);
+																			// double single quotes for pathstring
+																			for (ctr2 = 0; ctr2 < strlen(pathstring); ctr2++)
+																			{
+																				if (pathstring[ctr2] == 39) 
+																				{
+																					safepathstring[safectr2] = 39;
+																					safectr2++;
+																				}
+																				safepathstring[safectr2] = pathstring[ctr2];
+																				safectr2++;
+																			}
+																			safepathstring[safectr2] = 0;
+																			// write to database
+																			sqlcmd2 = g_strconcat("REPLACE INTO files (hash,length,name)",
+																			                      " VALUES ('",
+																			                      hashstring,
+																			                      "',",
+																			                      filelengthstr,
+																			                      ",'",
+																			                      safepathstring,
+																			                      "');", NULL);
+																			if (!((sqlite3_exec(torrent_db, sqlcmd2, NULL, 0, &err_msg3)) == SQLITE_OK))
+																			{
+																				printf("SQL error: %s\n", err_msg3);
+																				sqlite3_free(err_msg3);
+																			}
+																			dictloop = FALSE;
+																			ptr++;
+																		}
+																		else 
+																		{
+																			char dictentry[1024];
+																			long dictentry_len;
+
+																			// get a string
+																			dictentry_len = strtol(&metadatabuffer[ptr], NULL, 10);
+																			if (dictentry_len < 0) ptr++; // jump minus sign
+																			while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																			ptr++; // jump ':'
+																			snprintf(dictentry, dictentry_len + 1, "%s", &metadatabuffer[ptr]);
+																			ptr = ptr + dictentry_len; // jump to next item
+																			if (!strcmp(dictentry, "length"))
+																			{
+																				ptr++;  //jump over 'i'
+																				filelength = strtol(&metadatabuffer[ptr], NULL, 10);
+																				length = length + filelength;
+																				if (filelength < 0) ptr++; // jump minus sign
+																				while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																				ptr++;  //jump over 'e'
+																			}
+																			else if (!strcmp(dictentry, "path"))
+																			{
+																				// list of strings
+
+																				ptr++; // jump 'l'
+																				int pathloop = TRUE;
+																				while (pathloop)
+																				{
+																					if (metadatabuffer[ptr] == 'e') // end of path list
+																					{
+																						pathloop = FALSE;
+																						ptr++;
+																					}
+																					else 
+																					{
+																						char tmpstring[PATH_MAX];
+																						long tmpstrlen;
+
+																						// get string
+																						tmpstrlen = strtol(&metadatabuffer[ptr], NULL, 10);
+																						if (tmpstrlen < 0) ptr++; // jump minus sign
+																						while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																						ptr++; // jump ':'
+																						snprintf(tmpstring, tmpstrlen + 1, "%s", &metadatabuffer[ptr]);
+																						strcat(pathstring, tmpstring);
+																						ptr = ptr + tmpstrlen;
+																						if (!(metadatabuffer[ptr] == 'e')) strcat(pathstring, "/");
+																					}
+																				}
+																				//g_print("   %s\n", pathstring);
+																			}
+																			else
+																			{
+																				int level = 512;
+
+																				// jump one item
+																				while (level > 0)
+																				{
+																					int tmpptr;
+
+																					tmpptr = ptr;
+																					if (level == 512) level = 0;
+																					if (metadatabuffer[tmpptr] == 'd')
+																					{
+																						level++;
+																						ptr++;
+																					}
+																					else if (metadatabuffer[tmpptr] == 'l')
+																					{
+																						level++;
+																						ptr++;
+																					}
+																					else if (metadatabuffer[tmpptr] == 'e')
+																					{
+																						level--;
+																						ptr++;
+																					}
+																					else if (metadatabuffer[tmpptr] == 'i')
+																					{
+																						long somenum;
+
+																						ptr++;  //jump over 'i'
+																						somenum = strtol(&metadatabuffer[ptr], NULL, 10);
+																						if (somenum < 0) ptr++; // jump minus sign
+																						while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																						ptr++;  //jump over 'e'
+																					}
+																					else if (isdigit(metadatabuffer[tmpptr]) != 0)
+																					{
+																						long str_len;
+
+																						str_len = strtol(&metadatabuffer[ptr], NULL, 10);
+																						if (str_len < 0) ptr++; // jump minus sign
+																						while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																						ptr = ptr + str_len + 1;
+																					}
+																					else
+																					{
+																						g_print("Unparsable item!\n");
+																						ptr = metasize;
+																						dictloop = FALSE;
+																						filesloop = FALSE;
+																						level = 0;
+																					}
+																				}
+																			}
+																		}
+																	}
+																}
+															}
+														}
+														else
+														{
+															int level = 512;
+
+															// jump one item
+															while (level > 0)
+															{
+																int tmpptr;
+
+																tmpptr = ptr;
+																if (level == 512) level = 0;
+																if (metadatabuffer[tmpptr] == 'd')
+																{
+																	level++;
+																	ptr++;
+																}
+																else if (metadatabuffer[tmpptr] == 'l')
+																{
+																	level++;
+																	ptr++;
+																}
+																else if (metadatabuffer[tmpptr] == 'e')
+																{
+																	level--;
+																	ptr++;
+																}
+																else if (metadatabuffer[tmpptr] == 'i')
+																{
+																	long somenum;
+
+																	ptr++;  //jump over 'i'
+																	somenum = strtol(&metadatabuffer[ptr], NULL, 10);
+																	if (somenum < 0) ptr++; // jump minus sign
+																	while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																	ptr++;  //jump over 'e'
+																}
+																else if (isdigit(metadatabuffer[tmpptr]) != 0)
+																{
+																	long str_len;
+
+																	str_len = strtol(&metadatabuffer[ptr], NULL, 10);
+																	if (str_len < 0) ptr++; // jump minus sign
+																	while (isdigit(metadatabuffer[ptr]) != 0) ptr++;
+																	ptr = ptr + str_len + 1;
+																}
+																else
+																{
+																	g_print("Unparsable item!\n");
+																	//g_print("loc: %s\n", &metadatabuffer[ptr]);
+																	ptr = metasize;
+																	level = 0;
+																}
+															}
+														}
+													}
+
+													{
+														gchar *sqlcmd = "";
+														char *err_msg2 = 0;
+														char lengthstr[256];
+														char privatestr[256];
+														char safenamestring[PATH_MAX * 2];
+														int ctr;
+														int safectr = 0;
+
+														// set lastseen
+														currenttime = time(NULL);
+														tm = *localtime(&currenttime);
+														sprintf(lastseen, "%04d%02d%02d%02d%02d%02d", 
+														        tm.tm_year + 1900, 
+														        tm.tm_mon + 1, 
+														        tm.tm_mday, 
+														        tm.tm_hour, 
+														        tm.tm_min, 
+														        tm.tm_sec);
+														// convert ints to strings
+														sprintf(lengthstr, "%li", length);
+														sprintf(privatestr, "%li", private);
+														// double single quotes for sql
+														for (ctr = 0; ctr < strlen(namestring); ctr++)
+														{
+															if (namestring[ctr] == 39) 
+															{
+																safenamestring[safectr] = 39;
+																safectr++;
+															}
+															safenamestring[safectr] = namestring[ctr];
+															safectr++;
+														}
+														safenamestring[safectr] = 0;
+														// write to database
+														sqlcmd = g_strconcat("REPLACE INTO hash (hash,name,lastseen,length,private)",
+														                     " VALUES ('",
+														                     hashstring,
+														                     "','",
+														                     safenamestring,
+														                     "','",
+														                     lastseen,
+														                     "',",
+														                     lengthstr,
+														                     ",",
+														                     privatestr,
+														                     ");", NULL);
+														if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
+														{
+															printf("SQL error: %s\n", err_msg2);
+															sqlite3_free(err_msg2);
+														}
+
+														if (bHasFiles == FALSE)
+														{
+															// write name to files table
+															sqlcmd = g_strconcat("REPLACE INTO files (hash,length,name)",
+															                     " VALUES ('",
+															                     hashstring,
+															                     "',",
+															                     lengthstr,
+															                     ",'",
+															                     safenamestring,
+															                     "');", NULL);
+															if (!((sqlite3_exec(torrent_db, sqlcmd, NULL, 0, &err_msg2)) == SQLITE_OK))
+															{
+																printf("SQL error: %s\n", err_msg2);
+																sqlite3_free(err_msg2);
+															}
+														}
+														fprintf(bt_display, "Metadata parsed into database.\n");
+														fflush(bt_display);
+														sleep(1);
+														display_record();
+													}
+												}
 											}
 										}
 										else
