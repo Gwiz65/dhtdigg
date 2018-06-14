@@ -953,7 +953,7 @@ gint GetMetadataThread (void)
 																				printf("SQL error: %s\n", err_msg3);
 																				sqlite3_free(err_msg3);
 																			}
-																			sleep(1);
+																			usleep(10000);
 																			dictloop = FALSE;
 																			ptr++;
 																		}
@@ -1177,7 +1177,7 @@ gint GetMetadataThread (void)
 															printf("SQL error: %s\n", err_msg2);
 															sqlite3_free(err_msg2);
 														}
-														sleep(1);
+														usleep(10000);
 														if (bHasFiles == FALSE)
 														{
 															// write name to files table
@@ -1197,7 +1197,7 @@ gint GetMetadataThread (void)
 														}
 														fprintf(bt_display, "Metadata parsed into database.\n");
 														fflush(bt_display);
-														sleep(1);
+														usleep(10000);
 														display_record();
 													}
 												}
