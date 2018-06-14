@@ -49,6 +49,7 @@ GtkLabel *PrivateLabel;
 GtkLabel *RecordCount;
 GtkListStore *FileList;
 GtkTreeIter iter;
+GtkLinkButton *MagnetLink;
 gboolean dhtloop = TRUE;
 gboolean getmetadataloop = TRUE;
 static unsigned char buf[4096];
@@ -137,12 +138,17 @@ int getrecord(void *data, int argc, char **argv, char **azColName)
 	int srcptr = 0;
 	char *err_msg = 0;
 	gchar *sqlcmd = "";
+	char magtext[4096];
 
 	// set currentrowid
 	currentrowid = strtol(argv[0], NULL, 10);
 	// set display
 	gtk_label_set_text (TorrentNameLabel, argv[2]); 
 	gtk_label_set_text (HashLabel, argv[1]);
+	// magnet:?xt=urn:btih:edba09681fa806510a6a434e6cdeb4ab9f2d14d7&dn=the.crown.S02E10.HDTV.SubtituladoEsp.SC.avi
+	sprintf(magtext, "magnet:?xt=urn:btih:%s&dn=%s", argv[1], argv[2]);
+	gtk_button_set_label ((GtkButton *) MagnetLink, magtext);
+	gtk_link_button_set_uri (MagnetLink, magtext);
 	// format last seen time
 	sprintf(temp1, "%s", argv[3]);
 	while (srcptr < strlen(temp1))
@@ -212,6 +218,8 @@ void display_record(void)
 	{
 		gtk_label_set_text (TorrentNameLabel, ""); 
 		gtk_label_set_text (HashLabel, "");
+		gtk_button_set_label ((GtkButton *) MagnetLink, "");
+		gtk_link_button_set_uri (MagnetLink, "");
 		gtk_label_set_text (LastSeenLabel, "");
 		gtk_label_set_text (LengthLabel, "");
 		gtk_label_set_text (PrivateLabel, "");
@@ -945,6 +953,7 @@ gint GetMetadataThread (void)
 																				printf("SQL error: %s\n", err_msg3);
 																				sqlite3_free(err_msg3);
 																			}
+																			sleep(1);
 																			dictloop = FALSE;
 																			ptr++;
 																		}
@@ -1168,7 +1177,7 @@ gint GetMetadataThread (void)
 															printf("SQL error: %s\n", err_msg2);
 															sqlite3_free(err_msg2);
 														}
-
+														sleep(1);
 														if (bHasFiles == FALSE)
 														{
 															// write name to files table
@@ -1709,16 +1718,10 @@ static GtkWidget* CreateMainWindow (void)
 		HashLabel = GTK_LABEL (gtk_builder_get_object (builder, "hash_label"));
 		LastSeenLabel = GTK_LABEL (gtk_builder_get_object (builder, "last_seen"));
 		LengthLabel = GTK_LABEL (gtk_builder_get_object (builder, "length"));
-
 		PrivateLabel = GTK_LABEL (gtk_builder_get_object (builder, "private_label"));
-
-
 		FileList = GTK_LIST_STORE (gtk_builder_get_object (builder, "liststore1"));
-
-		// RecordCount
 		RecordCount = GTK_LABEL (gtk_builder_get_object (builder, "record_count"));
-
-
+		MagnetLink = GTK_LINK_BUTTON (gtk_builder_get_object (builder, "magnetlink"));
 		// unload builder
 		g_object_unref (builder);
 	}
