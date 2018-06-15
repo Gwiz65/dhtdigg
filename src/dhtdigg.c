@@ -811,7 +811,7 @@ gint GetMetadataThread (void)
 												int ctr;
 												int ptr = 0;
 
-												fprintf(bt_display, "Metadata captured!!    Disconnecting peer.\n");
+												fprintf(bt_display, "Metadata captured.   Disconnecting peer.\n");
 												fflush(bt_display);
 												// parse metadata
 												if ((!strncmp(&metadatabuffer[0], "d", 1)) && 
