@@ -35,8 +35,7 @@ dhtdigg_SOURCES = \
 	dht.h \
 	dht.c \
 	dhtdigg.h \
-	crypt3.h \
-	from
+	crypt3.h
 dhtdigg_LDFLAGS = \
 	-Wl,--export-dynamic
 dhtdigg_LDADD = $(DHTDIGG_LIBS)
