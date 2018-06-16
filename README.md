@@ -1,8 +1,8 @@
-# dhtdigg
+# DhtDigg
 
-dhtdigg uses the work of Juliusz Chroboczek (dht.c & dht.h) to access the
+DhtDigg uses the work of Juliusz Chroboczek (dht.c & dht.h) to access the
 mainline dht network and capture announced peer addresses and thier 
-associated info_hashes. Once captured, dhtdigg attempts to create a BT
+associated info_hashes. Once captured, DhtDigg attempts to create a BT
 connection and request the metadata associated with that info_hash. If
 successful, the metadata is parsed into a Sqlite database named dhtdigg.db. 
 The GUI is a simple database viewer that also has message displays from the 
@@ -12,8 +12,8 @@ WARNING:  The database entries found with this program are UNFILTERED &
           UNCENSORED and may point to copyrighted content. Click on magnet
           links at your own risk.
 
-NOTE:     dhtdigg does not download or share any of the bittorrent pieces
-          containing the content being shared via bittorent. dhtdigg only
+NOTE:     DhtDigg does not download or share any of the bittorrent pieces
+          containing the content being shared via bittorent. DhtDigg only
           downloads the metadata and then disconnects.
 
 
