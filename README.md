@@ -15,6 +15,13 @@ WARNING:  The database entries found with this program are UNFILTERED &
 NOTE:     dhtdigg does not download or share any of the bittorrent pieces
           containing the content being shared via bittorent. dhtdigg only
           downloads the metadata and then disconnects.
+
+
+![alt text](Screenshot-2018-06-15-20-41-02.png "Screenshot")
+Screenshot
+
+
+
 TODO:
  - Currently seach does nothing. 
  - Currently not capturing IPv6 peers.

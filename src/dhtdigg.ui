@@ -190,12 +190,11 @@
                             </child>
                             <child>
                               <object class="GtkLinkButton" id="magnetlink">
-                                <property name="label" translatable="yes">magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a</property>
+                                <property name="label" translatable="yes"></property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">True</property>
                                 <property name="relief">none</property>
-                                <property name="uri">magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a</property>
                               </object>
                               <packing>
                                 <property name="expand">False</property>
