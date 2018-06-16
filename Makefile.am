@@ -26,8 +26,7 @@ dist_doc_DATA = \
 	AUTHORS \
 	ChangeLog \
 	INSTALL \
-	NEWS \
-	Screenshot-2018-06-15-20-41-02.png
+	NEWS
 
 # Remove doc directory on uninstall
 uninstall-local:
