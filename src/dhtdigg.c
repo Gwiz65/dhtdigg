@@ -1195,6 +1195,21 @@ gint GetMetadataThread (void)
 																sqlite3_free(err_msg2);
 															}
 														}
+														// if we are replacing current record currentrecord = new (last) record
+														if (!strncmp(gtk_label_get_text(HashLabel), hashstring, 40))
+														{
+															char *err_msg = 0;
+
+															// set record to last
+															if (!((sqlite3_exec(torrent_db, 
+															                    "SELECT rowid FROM hash ORDER BY rowid DESC LIMIT 1;",
+															                    getrowid_ret, 0, &err_msg)) == SQLITE_OK))
+															{
+																printf("SQL error: %s\n", err_msg);
+																sqlite3_free(err_msg);
+															}
+															currentrowid = rowid_ret;
+														}
 														fprintf(bt_display, "Metadata parsed into database.\n");
 														fflush(bt_display);
 														usleep(10000);
