@@ -1133,6 +1133,7 @@ gint GetMetadataThread (void)
 														char safenamestring[PATH_MAX * 2];
 														int ctr;
 														int safectr = 0;
+														const gchar *currenthash;
 
 														// set lastseen
 														currenttime = time(NULL);
@@ -1196,7 +1197,9 @@ gint GetMetadataThread (void)
 															}
 														}
 														// if we are replacing current record currentrecord = new (last) record
-														if (!strncmp(gtk_label_get_text(HashLabel), hashstring, 40))
+
+														currenthash = gtk_label_get_text(HashLabel);
+														if (!strncmp(currenthash, hashstring, 40))
 														{
 															char *err_msg = 0;
 
