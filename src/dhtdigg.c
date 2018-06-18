@@ -1133,7 +1133,6 @@ gint GetMetadataThread (void)
 														char safenamestring[PATH_MAX * 2];
 														int ctr;
 														int safectr = 0;
-														const gchar *currenthash;
 
 														// set lastseen
 														currenttime = time(NULL);
@@ -1196,14 +1195,13 @@ gint GetMetadataThread (void)
 																sqlite3_free(err_msg2);
 															}
 														}
-														// if we are replacing current record currentrecord = new (last) record
-
-														currenthash = gtk_label_get_text(HashLabel);
-														if (!strncmp(currenthash, hashstring, 40))
+														// if we are replacing current record currentrecord = 0
+														const gchar *currenthash = gtk_label_get_text(HashLabel);
+														if (!g_strcmp0(currenthash, hashstring)) 
 														{
 															char *err_msg = 0;
 
-															// set record to last
+															// set current rowid to last
 															if (!((sqlite3_exec(torrent_db, 
 															                    "SELECT rowid FROM hash ORDER BY rowid DESC LIMIT 1;",
 															                    getrowid_ret, 0, &err_msg)) == SQLITE_OK))
